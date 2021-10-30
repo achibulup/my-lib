@@ -1,5 +1,11 @@
 #ifndef BIGNUM_H_INCLUDED
 #define BIGNUM_H_INCLUDED
+
+//Big integer handling
+//the two class Int and uInt provide support for big integer arithmetics
+//Int can handle signed integer while uInt also supports bitwise operations for unsigned integer
+
+
 #include <cmath> //log2
 #include <string> //input
 #include <limits> //unsigned long long max
@@ -41,14 +47,6 @@ using pointer = base_type*;
 template<typename Tp>
 using isIntegral_t = EnableIf_t<std::is_integral<Tp>::value>*;
 
-void copy(pointer dest, const_pointer src, size_type len)
-{
-    memcpy(dest, src, len * sizeof(base_type));
-}
-void move(pointer dest, const_pointer src, size_type len)
-{
-    memmove(dest, src, len * sizeof(base_type));
-}
 
 class IntData
 {
@@ -202,12 +200,13 @@ class bit_proxy
 
 struct uIntDivResult;
 
-
+///big unsigned integer
 class uInt
 {
   public:
     uInt() noexcept : i_data(), i_size(0)  {}
 
+    ///when you want to reuse resources you might not want to implement assignment in term of constructor
     uInt(std::uintmax_t val) : uInt()
     { *this = val; }
 
@@ -253,6 +252,7 @@ class uInt
         swap(a.i_size, b.i_size);
     }
     
+    ///downcasts to smaller primitive integers
     template<typename intg, n_Int_helper::isIntegral_t<intg> = nullptr>
     explicit operator intg() const noexcept
     {
@@ -318,29 +318,17 @@ class uInt
 
 
     friend bool operator == (const uInt &l, const uInt &r)
-    {
-        return SegView(l) == SegView(r);
-    }
+    { return SegView(l) == SegView(r); }
     friend bool operator != (const uInt &l, const uInt &r)
-    {
-        return !(l == r);
-    }
+    { return !(l == r); }
     friend bool operator < (const uInt &l, const uInt &r)
-    {
-        return SegView(l) < SegView(r);
-    }
+    { return SegView(l) < SegView(r); }
     friend bool operator > (const uInt &l, const uInt &r)
-    {
-        return r < l;
-    }
+    { return r < l; }
     friend bool operator <= (const uInt &l, const uInt &r)
-    {
-        return !(r < l);
-    }
+    { return !(r < l); }
     friend bool operator >= (const uInt &l, const uInt &r)
-    {
-        return !(l < r);
-    }
+    { return !(l < r); }
     
     friend uInt operator + (uInt);
     
@@ -437,16 +425,13 @@ class uInt
         return product(rhs, lhs);
     }
     
+    ///have to be defined outside because of incomplete type issue
     friend uInt operator / (const uInt&, const uInt&);
     friend uInt operator % (const uInt&, const uInt&);
     friend uIntDivResult div(const uInt&, const uInt&);
 
 
-    // friend n_Int_helper::bit_proxy bit(uInt &x, size_t pos) noexcept
-    // {
-    //     auto dec = decompose(pos);
-    //     return n_Int_helper::bit_proxy(x.i_data[dec.unit], dec.digit);
-    // }
+ 
     friend bool getbit(const uInt &x, size_t pos) noexcept
     {
         auto dec = decompose(pos);
@@ -855,6 +840,7 @@ class uInt
         size_type rhs_dc = rhs.digit_count();
         wcalc_type lhs_msd = lhs.msd(rhs_dc - k_BaseBinDigit);
         wcalc_type rhs_msd = rhs.msd(rhs_dc - k_BaseBinDigit);
+        ///dividing the most significant digits is a good approximation
         calc_type quotient =
              std::min<calc_type>(k_Base - 1, (lhs_msd + 1) / rhs_msd);
         uInt remainder;
@@ -971,8 +957,8 @@ class uInt
         if(lhs.i_size < dec.unit) {}
         else if (dec.digit == 0) {
           if(dec.unit || (lhs.i_data.cbegin() != res->i_data.begin()))
-            n_Int_helper::move(res->i_data.begin(), 
-              lhs.i_data.cbegin() + dec.unit, lhs.i_size - dec.unit);
+            std::copy_n(lhs.i_data.cbegin() + dec.unit, 
+                        lhs.i_size - dec.unit, res->i_data.begin());
         }
         else {
           res->i_data[0] = lhs.i_data[dec.unit] >> dec.digit;
@@ -992,8 +978,8 @@ class uInt
         res->i_data.zero_init(0, dec.unit);
         if (dec.digit == 0) {
           if(dec.unit || (lhs.i_data.cbegin() != res->i_data.begin()))
-            n_Int_helper::move(res->i_data.begin() + dec.unit, 
-              lhs.i_data.cbegin(), lhs.i_size);
+            std::copy_n(lhs.i_data.cbegin(), 
+                        lhs.i_size, res->i_data.begin() + dec.unit);
         }
         else {
           res->i_data[lhs.i_size + dec.unit + 1] = 0;
@@ -1071,12 +1057,12 @@ class uInt
     }
     static void copy_and_shift(uInt &dest, SegView src)
     {
-        n_Int_helper::copy(dest.i_data.begin() + 1, src.cbegin(), src.size);
+        std::copy_n(src.cbegin(), src.size, dest.i_data.begin() + 1);
         dest.i_size = src.size + 1;
     }
     static void unsafe_copy_data(uInt &dest, SegView src)
     {
-        n_Int_helper::copy(dest.i_data.begin(), src.cbegin(), src.size);
+        std::copy_n(src.cbegin(), src.size, dest.i_data.begin());
         dest.i_size = src.size;
     }
 
@@ -1172,9 +1158,8 @@ inline uIntDivResult div(const uInt &divident, const uInt &divisor)
                       uInt{divisor.i_size + 1, divisor.i_size - 1}};
     uInt cur_divident(divisor.i_size + 1, 0);
     /// copy <divisor.digitcount - 1> divident's most significant digits to cur remainder
-    n_Int_helper::copy(res.rem.i_data.begin()
-        , divident.i_data.cbegin() + quotient_max_size
-        , divisor.i_size - 1);
+    std::copy_n(divident.i_data.cbegin() + quotient_max_size, 
+                divisor.i_size - 1, res.rem.i_data.begin());
 
     for(uInt::size_type i = quotient_max_size; i-- > 0;) {
       uInt::copy_and_shift(cur_divident, res.rem);
@@ -1199,13 +1184,13 @@ auto operator >> (istr &is, uInt &x)
 -> decltype(is >> std::declval<std::string&>())
 {
     std::string input;
-    decltype(is >> input) chain = is >> input;
+    auto &&chain = is >> input;
     x.parse(input);
-    return chain;
+    return std::forward<decltype(chain)>(chain);
 }
 
 template<typename ostr>
-auto operator << (ostr &os, const uInt &x) 
+auto operator << (ostr &os, const uInt &x)
 -> decltype(os << to_string(x))
 {
     return os << to_string(x);
@@ -1215,7 +1200,7 @@ auto operator << (ostr &os, const uInt &x)
 
 struct IntDivResult;
 
-
+///big signed integer
 class Int
 {
   public:
@@ -1251,7 +1236,7 @@ class Int
     Int& operator = (Int&&) & noexcept = default;
     Int& operator = (const Int&) & = default;
 
-
+    ///have to call member func because of friend-ing issue
     friend void swap(Int &a, Int &b) noexcept
     {
         Int::swap(a, b);
