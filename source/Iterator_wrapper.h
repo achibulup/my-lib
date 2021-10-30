@@ -4,61 +4,44 @@
 namespace Achibulup
 {
 
-    template<typename uiter, typename container_type>
+    template<typename Iter, typename Container>
     class Iterator_wrapper
     {
-        uiter i_base;
-
-    public:
-        using iterator_category       =   typename std::iterator_traits<uiter>::iterator_category;
-        using value_type              =   typename std::iterator_traits<uiter>::value_type;
-        using difference_type         =   typename std::iterator_traits<uiter>::difference_type;
-        using reference               =   typename std::iterator_traits<uiter>::reference;
-        using pointer                 =   typename std::iterator_traits<uiter>::pointer;
+      public:
+        using iterator_category       =   typename std::iterator_traits<Iter>::iterator_category;
+        using value_type              =   typename std::iterator_traits<Iter>::value_type;
+        using difference_type         =   typename std::iterator_traits<Iter>::difference_type;
+        using reference               =   typename std::iterator_traits<Iter>::reference;
+        using pointer                 =   typename std::iterator_traits<Iter>::pointer;
 
         Iterator_wrapper() = default;
-        Iterator_wrapper(const uiter &it) : i_base(it) {}
-        Iterator_wrapper(uiter &&it) : i_base(static_cast<uiter&&>(it)) {}
-        template<typename other_iter>
-        Iterator_wrapper(const Iterator_wrapper<other_iter, container_type> &cast) : i_base(cast.base()) {}
+        Iterator_wrapper(const Iter &it) : i_base(it) {}
+        Iterator_wrapper(Iter &&it) : i_base(std::move(it)) {}
+
+        template<typename otherIter>
+        Iterator_wrapper(const Iterator_wrapper<otherIter, Container> &cast) 
+        : i_base(cast.base()) {}
+
+        const Iter& base() const
+        {
+            return i_base;
+        }
+
+        ///input iter & forward iter requirements
 
         reference operator * () const
         {
             return *(this->i_base);
         }
-        const uiter& operator -> () const
+        const Iter& operator -> () const
         {
             return this->i_base;
         }
-        reference operator [] (difference_type i) const
-        {
-            return *(*this + i);
-        }
 
         friend bool operator == (const Iterator_wrapper &iterl, const Iterator_wrapper &iterr)
-        {
-            return iterl.i_base == iterr.i_base;
-        }
+        { return iterl.i_base == iterr.i_base; }
         friend bool operator != (const Iterator_wrapper &iterl, const Iterator_wrapper &iterr)
-        {
-            return iterl.i_base != iterr.i_base;
-        }
-        friend bool operator > (const Iterator_wrapper &iterl, const Iterator_wrapper &iterr)
-        {
-            return iterl.i_base > iterr.i_base;
-        }
-        friend bool operator >= (const Iterator_wrapper &iterl, const Iterator_wrapper &iterr)
-        {
-            return iterl.i_base >= iterr.i_base;
-        }
-        friend bool operator < (const Iterator_wrapper &iterl, const Iterator_wrapper &iterr)
-        {
-            return iterl.i_base < iterr.i_base;
-        }
-        friend bool operator <= (const Iterator_wrapper &iterl, const Iterator_wrapper &iterr)
-        {
-            return iterl.i_base <= iterr.i_base;
-        }
+        { return iterl.i_base != iterr.i_base; }
 
         Iterator_wrapper& operator ++ ()
         {
@@ -71,11 +54,8 @@ namespace Achibulup
             ++(*this);
             return store;
         }
-        const uiter& base() const
-        {
-            return i_base;
-        }
 
+        ///bidirectional iter requirements
         Iterator_wrapper& operator -- ()
         {
             --(this->i_base);
@@ -87,6 +67,21 @@ namespace Achibulup
             --(*this);
             return store;
         }
+
+        ///random access iter requirements
+        reference operator [] (difference_type i) const
+        {
+            return *(*this + i);
+        }
+
+        friend bool operator > (const Iterator_wrapper &iterl, const Iterator_wrapper &iterr)
+        { return iterl.i_base > iterr.i_base; }
+        friend bool operator >= (const Iterator_wrapper &iterl, const Iterator_wrapper &iterr)
+        { return iterl.i_base >= iterr.i_base; }
+        friend bool operator < (const Iterator_wrapper &iterl, const Iterator_wrapper &iterr)
+        { return iterl.i_base < iterr.i_base; }
+        friend bool operator <= (const Iterator_wrapper &iterl, const Iterator_wrapper &iterr)
+        { return iterl.i_base <= iterr.i_base; }
 
         Iterator_wrapper& operator += (difference_type d)
         {
@@ -114,6 +109,9 @@ namespace Achibulup
         {
             return iterl.i_base - iterr.i_base;
         }
+
+      private:
+        Iter i_base;
     };
 }
 
