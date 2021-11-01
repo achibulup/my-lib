@@ -3,6 +3,7 @@
 #include <typeinfo>
 #include <stdexcept>
 #include "common_utils.h"
+#include "objectManagement.h"
 
 namespace Achibulup{
 

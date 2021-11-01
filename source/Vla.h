@@ -8,6 +8,7 @@
 #include <initializer_list>
 #include "Iterator_wrapper.h"
 #include "common_utils.h"
+#include "objectManagement.h"
 namespace Achibulup
 {
 
