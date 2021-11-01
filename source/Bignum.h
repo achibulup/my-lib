@@ -15,9 +15,6 @@
 #include <algorithm> //max, min
 #include <stdexcept> // exception
 #include "common_utils.h"
-#if ACHIBULUP__Cpp17_later
-#include <string_view>
-#endif //ACHIBULUP__Cpp17_later
 
 namespace Achibulup{
 
