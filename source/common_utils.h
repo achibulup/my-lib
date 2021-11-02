@@ -17,6 +17,7 @@
 #include <string>
 #include <cstdint>
 #include <utility>
+#include <sstream>
 #include <iterator>
 #include <type_traits>
 #if ACHIBULUP__Cpp17_later
@@ -36,11 +37,74 @@ namespace Achibulup{
 using size_t = std::ptrdiff_t;
 
 #if ACHIBULUP__Cpp17_later
-using str_arg = std::string_view;
-using wstr_arg = std::wstring_view;
+using std::string_view;
+using std::wstring_view;
 using std::byte;
 #else
-using str_arg = const std::string&;
+class string_view
+{
+    public:
+    using size_type = size_t;
+    using const_iterator = const char*;
+    using iterator = const_iterator;
+
+
+    constexpr string_view() noexcept : i_ptr(), i_len() {}
+    constexpr string_view(const char *p, size_t ln) noexcept
+    : i_ptr(p), i_len(ln) {}
+    template<size_t Nm>
+    constexpr string_view(const char (&str)[Nm]) noexcept
+    : i_ptr(str), i_len(Nm - 1) {}
+    string_view(const std::string &str) 
+    : i_ptr(str.c_str()), i_len(str.size()) {}
+
+    constexpr char operator [] (size_type i) const noexcept
+    {
+        return this->i_ptr[i];
+    }
+    constexpr size_type size() const noexcept
+    {
+        return this->i_len;
+    }
+
+    constexpr const_iterator cbegin() const noexcept
+    {
+        return i_ptr;
+    }
+    constexpr iterator begin() const noexcept
+    {
+        return cbegin();
+    }
+    constexpr const_iterator cend() const noexcept
+    {
+        return i_ptr + i_len;
+    }
+    constexpr iterator end() const noexcept
+    {
+        return cend();
+    }
+
+    constexpr const char* data() const noexcept
+    {
+        return i_ptr;
+    }
+
+    operator std::string () const
+    {
+        return std::string(cbegin(), cend());
+    }
+
+    private:
+    const_iterator i_ptr;
+    size_type i_len;
+};
+template <typename ostr>
+ostr& operator << (ostr &os, string_view s)
+{
+    for(char c : s)
+      os << c;
+    return os;
+}
 using wstr_arg = const std::wstring&;
 using byte = unsigned char;
 #endif
@@ -68,6 +132,8 @@ using Typeof = typename Typeof_helper<Tp>::type;
 template<bool constraint>
 using EnableIf_t = typename std::enable_if<constraint>::type;
 
+template<typename From, typename To>
+using cast_t = To;
 
 template<typename from, typename to>
 struct copy_cvref
@@ -144,52 +210,82 @@ inline ACHIBULUP__constexpr_fun14 void Move_assign(Tp &var, Tp &val)
 
 
 
+
+
+/// string utilities
+
+using std::to_string;
+template<typename Tp, 
+        typename = EnableIf_t<std::is_convertible<Tp, std::string>::value>>
+std::string to_string(Tp &&x)
+{
+    return std::forward<Tp>(x);
+}
+
+void string_format_helper(std::ostringstream& result) {}
+template<typename Tp, typename ...Args>
+void string_format_helper(std::ostringstream& result, 
+                          const Tp &first, const Args& ...args)
+{
+    result << first;
+    string_format_helper(result, args...);
+}
+template<typename ...Args>
+std::string string_format(const Args& ...args)
+{
+    std::ostringstream result;
+    string_format_helper(result, args...);
+    return result.str();
+}
+
+
+
 template<typename Tp>
-Tp convert(str_arg);
+Tp convert(string_view);
 #if ACHIBULUP__Cpp17_later
-template<> int convert<int>(std::string_view str)
+template<> int convert<int>(string_view str)
 {
     int res = 0;
     std::from_chars(str.data(), str.data() + str.size(), res);
     return res;
 }
-template<> unsigned int convert<unsigned int>(std::string_view str)
+template<> unsigned int convert<unsigned int>(string_view str)
 {
     unsigned int res = 0;
     std::from_chars(str.data(), str.data() + str.size(), res);
     return res;
 }
-template<> short convert<short>(std::string_view str)
+template<> short convert<short>(string_view str)
 {
     short res = 0;
     std::from_chars(str.data(), str.data() + str.size(), res);
     return res;
 }
-template<> unsigned short convert<unsigned short>(std::string_view str)
+template<> unsigned short convert<unsigned short>(string_view str)
 {
     unsigned short res = 0;
     std::from_chars(str.data(), str.data() + str.size(), res);
     return res;
 }
-template<> long convert<long>(std::string_view str)
+template<> long convert<long>(string_view str)
 {
     long res = 0;
     std::from_chars(str.data(), str.data() + str.size(), res);
     return res;
 }
-template<> unsigned long convert<unsigned long>(std::string_view str)
+template<> unsigned long convert<unsigned long>(string_view str)
 {
     unsigned long res = 0;
     std::from_chars(str.data(), str.data() + str.size(), res);
     return res;
 }
-template<> long long convert<long long>(std::string_view str)
+template<> long long convert<long long>(string_view str)
 {
     long long res = 0;
     std::from_chars(str.data(), str.data() + str.size(), res);
     return res;
 }
-template<> unsigned long long convert<unsigned long long>(std::string_view str)
+template<> unsigned long long convert<unsigned long long>(string_view str)
 {
     unsigned long long res = 0;
     std::from_chars(str.data(), str.data() + str.size(), res);
@@ -197,42 +293,42 @@ template<> unsigned long long convert<unsigned long long>(std::string_view str)
 }
 #else
 template<> int 
-convert<int>(const std::string &str)
+convert<int>(string_view str)
 {
     return std::stoll(str);
 }
 template<> unsigned int 
-convert<unsigned int>(const std::string &str)
+convert<unsigned int>(string_view str)
 {
     return std::stoull(str);
 }
 template<> short 
-convert<short>(const std::string &str)
+convert<short>(string_view str)
 {
     return std::stoll(str);
 }
 template<> unsigned short 
-convert<unsigned short>(const std::string &str)
+convert<unsigned short>(string_view str)
 {
     return std::stoull(str);
 }
 template<> long 
-convert<long>(const std::string &str)
+convert<long>(string_view str)
 {
     return std::stoll(str);
 }
 template<> unsigned long 
-convert<unsigned long>(const std::string &str)
+convert<unsigned long>(string_view str)
 {
     return std::stoull(str);
 }
 template<> long long 
-convert<long long>(const std::string &str)
+convert<long long>(string_view str)
 {
     return std::stoll(str);
 }
 template<> unsigned long long 
-convert<unsigned long long>(const std::string &str)
+convert<unsigned long long>(string_view str)
 {
     return std::stoull(str);
 }

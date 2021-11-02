@@ -4,126 +4,86 @@
 #include <vector>
 #include <string>
 #include <cstring>
-#if __cplusplus >= 201103L
 #include <initializer_list>
-#endif // __cplusplus
+#include "common_utils.h"
 
 namespace Achibulup
 {
-#if __cplusplus >= 201103L
-#define ACHIBULUP__lval_fun &
-#define ACHIBULUP__constexpr_fun11 constexpr
-#else
-#define ACHIBULUP__lval_fun
-#define ACHIBULUP__constexpr_fun11
-#endif // __cplusplus
 
-    using std::size_t;
-    template<typename Tp>
-    struct identity
-    {
-        typedef Tp type;
-    };
-
-    template<typename char_t>
-    struct string_view
-    {
-        const char_t *ptr;
-        size_t len;
-        ACHIBULUP__constexpr_fun11 string_view() : ptr(), len() {}
-        ACHIBULUP__constexpr_fun11 string_view(const char *p, size_t ln) : ptr(p), len(ln) {}
-        template<size_t Nm>
-        ACHIBULUP__constexpr_fun11 string_view(const char_t (&str)[Nm]) : ptr(str), len(Nm - 1) {}
-        template<class traits, class alloc>
-        string_view(const std::basic_string<char_t, traits, alloc> &str) : ptr(str.c_str()), len(str.size()) {}
-    };
-
-
-    template<typename char_t, char_t lbound = 0, char_t ubound = (~static_cast<char_t>(0)) ^ (1 << (sizeof(char_t) * CHAR_BIT - 1))>
+    template<char lbound = 0, char ubound = 127>
     class Trie
     {
-        struct Trie_access{};
-        typedef size_t id_type;
+        using id_type = size_t;
 
-    public:
-        typedef char_t char_type;
-        typedef size_t size_type;
+      public:
+        using size_type = size_t;
+        static const char char_lower_bound = lbound;
+        static const char char_upper_bound = ubound;
+        static const size_type char_range = ubound - lbound + 1;
+
         class cursor
         {
-            id_type value;
+            cursor(id_type val) : i_value(val) {}
 
-        public:
-            cursor() : value(0) {}
-            cursor(id_type val, Trie_access) : value(val) {}
+          public:
+            using hash_type = std::size_t;
 
-            typedef id_type hash_type;
+            cursor() : i_value(0) {}
+
             hash_type hash() const
             {
-                return value;
-            }
-
-            id_type get(Trie_access) const
-            {
-                return value;
+                return i_value;
             }
 
             friend bool operator == (const cursor &l, const cursor &r)
             {
-                return l.value == r.value;
+                return l.i_value == r.i_value;
             }
             friend bool operator != (const cursor &l, const cursor &r)
             {
-                return l.value != r.value;
+                return l.i_value != r.i_value;
             }
+          
+          private:
+            id_type i_value;
+            friend Trie;
         };
-        static const char_t value_lower_bound = lbound;
-        static const char_t value_upper_bound = ubound;
-        static const cursor npos;
-
-    private:
-        static id_type get(const cursor &index)
-        {
-            return index.get(Trie_access());
-        }
-        static const size_type value_range = static_cast<size_type>(ubound - lbound) + 1;
-        static const id_type rootid = 1;
-        static const id_type nposid = 0;
-
+    
+      private:
         struct node
         {
-            struct parent_t{
-                id_type index;
-                char_t value;
-                parent_t (id_type id, char_t val) : index(id), value(val) {}
-            }parent;
-            const id_type index;
+            node(id_type par, id_type idx, char val = 0) 
+            : id(idx), parent_id(par), value(val), 
+              ecnt(0), pcnt(0), child() {}
 
-            bool ecnt;
+            const id_type id;
+            id_type parent_id;
+            char value;
+            size_type ecnt;
             size_type pcnt;
-            id_type child[value_range];
+            id_type child[char_range];
 
-            node(id_type par, id_type idx, char_t val = 0) : parent(par, val), index(idx),
-                                                  ecnt(false), pcnt(0), child() {}
-
-            bool is_end() const
+            bool is_word() const
             {
                 return ecnt;
             }
+
             size_type as_end_count() const
             {
                 return ecnt;
             }
+
             size_type as_prefix_count() const
             {
                 return pcnt;
             }
 
-            const node* go_to(id_type _index) const
+            const node* go_to(id_type _id) const
             {
-                return (_index > index) ? (this + (_index - index)) : (this - (index - _index));
+                return this + (_id - id);
             }
 
-            id_type next(char_t val) const
+            id_type next(char val) const
             {
                 id_type res = child[val - lbound];
                 if(res == nposid) return nposid;
@@ -131,27 +91,27 @@ namespace Achibulup
                 return (pos->pcnt == 0) ? nposid : res;
             }
 
-            size_type length() const
+            size_type prefix_length() const
             {
                 size_type res = 0;
                 const node *cur = this;
-                while(cur->index != rootid){
+                while(cur->id != rootid){
                   ++res;
-                  cur = cur->go_to(cur->parent.index);
+                  cur = cur->go_to(cur->parent_id);
                 }
                 return res;
             }
 
-            std::basic_string<char_t> get_string() const
+            std::string get_prefix() const
             {
                 std::string res;
-                if(index != nposid){
-                  size_type dep = length();
+                if(id != nposid){
+                  size_type dep = prefix_length();
                   res.resize(dep);
                   const node *cur = this;
                   while(dep--){
-                    res[dep] = cur->parent.value;
-                  cur = cur->go_to(cur->parent.index);
+                    res[dep] = cur->value;
+                  cur = cur->go_to(cur->parent_id);
                   }
                 }
                 return res;
@@ -159,235 +119,19 @@ namespace Achibulup
 
         };
 
-        std::vector<node> data;
-        std::vector<id_type> reuse;
-        size_type ncnt;
-        size_type wcnt;
-
-        id_type get_next(id_type parent, char_t val)
-        {
-            id_type res;
-            if(reuse.empty()){
-              res = data.size();
-              data.push_back(node(parent, res, val));
-            }
-            else{
-              res = reuse.back();
-              data[res].parent.index = parent;
-              data[res].parent.value = val;
-              reuse.pop_back();
-            }
-            return res;
-        }
-
-        void init()
-        {
-            data.reserve(2);
-            data.push_back(node(nposid, nposid));
-            data.push_back(node(nposid, rootid));
-        }
-
-        static bool comp_tree(const node &l, const node &r)
-        {
-            if(l.ecnt != r.ecnt)
-              return false;
-            if(l.pcnt != r.pcnt)
-              return false;
-            for(size_type i = 0; i < value_range; ++i){
-              if(l.child[i] == nposid){
-                if(r.child[i] != nposid)
-                  return false;
-              }
-              else{
-                if(r.child[i] == nposid)
-                  return false;
-                if(!comp_tree(*l.go_to(l.child[i]), *r.go_to(r.child[i])))
-                  return false;
-              }
-            }
-            return true;
-        }
-
-    public:
-        Trie() : data(), reuse(), ncnt(0), wcnt(0)
-        {
-            init();
-        }
-
-        cursor root() const
-        {
-            if(data[rootid].pcnt == 0) return npos;
-            return cursor(rootid, Trie_access());
-        }
-
-        size_type node_count() const
-        {
-            return ncnt;
-        }
-
-        size_type word_count() const
-        {
-            return wcnt;
-        }
-
-        void reserve(size_type count) ACHIBULUP__lval_fun
-        {
-            data.reserve(count);
-        }
-
-        static bool _equal(const Trie &l, const Trie &r)
-        {
-            if(&l == &r) return true;
-            return comp_tree(l.data[rootid], r.data[rootid]);
-        }
-        static bool _different(const Trie &l, const Trie &r)
-        {
-            return !_equal(l, r);
-        }
-
-        bool is_end(const cursor &index) const
-        {
-            return data[get(index)].is_end();
-        }
-        size_type as_end_count(const cursor &index) const
-        {
-            return data[get(index)].as_end_count();
-        }
-        size_type as_prefix_count(const cursor &index) const
-        {
-            return data[get(index)].as_prefix_count();
-        }
-
-        cursor prev(const cursor &index) const
-        {
-            return cursor(data[get(index)].parent.index, Trie_access());
-        }
-
-        cursor next(const cursor &index, char_t val) const
-        {
-            return cursor(data[get(index)].next(val), Trie_access());
-        }
-
-        size_type length(const cursor &index) const
-        {
-            return data[get(index)].length();
-        }
-
-        std::basic_string<char_t> get_string(const cursor &index) const
-        {
-            return data[get(index)].get_string();
-        }
-
-        cursor insert(const char_t *str, size_type len) ACHIBULUP__lval_fun
-        {
-            id_type cur = rootid;
-            for(size_type i = 0; i < len; ++i){
-              id_type _next = data[cur].child[str[i] - lbound];
-              if(_next == nposid){
-                _next = get_next(cur, str[i]);
-                data[cur].child[str[i] - lbound] = _next;
-              }
-              cur = _next;
-            }
-            id_type res = cur;
-            if(!data[cur].ecnt){
-              data[cur].ecnt = true;
-              ++wcnt;
-              while(cur != nposid){
-                if(data[cur].pcnt == 0) ++ncnt;
-                ++data[cur].pcnt;
-                cur = data[cur].parent.index;
-              }
-            }
-            return cursor(res, Trie_access());
-        }
-        cursor insert(string_view<char_t> strv) ACHIBULUP__lval_fun
-        {
-            return insert(strv.ptr, strv.len);
-        }
-
-#if __cplusplus >= 201103
-        Trie(std::initializer_list<string_view<char_t>> init_list) : data(), reuse(), ncnt(0), wcnt(0)
-        {
-            init();
-            for(const string_view<char_t> &elem : init_list)
-              insert(elem);
-        }
-#endif // __cplusplus
-
-        cursor find(const char_t *str, size_type len) const ACHIBULUP__lval_fun
-        {
-            if(root() == npos) return npos;
-            cursor cur = root();
-            for(size_type i = 0; i < len; ++i){
-              cursor _next = next(cur, str[i]);
-              if(_next == npos) return npos;
-              cur = _next;
-            }
-            return cur;
-        }
-        cursor find(string_view<char_t> strv) const
-        {
-            return find(strv.ptr, strv.len);
-        }
-
-        size_type count(const char_t *str, size_type len) const
-        {
-            return (find(str, len) != npos) ? 1 : 0;
-        }
-        size_type count(string_view<char_t> strv) const
-        {
-            return count(strv.ptr, strv.len);
-        }
-
-        bool erase(const cursor &index) ACHIBULUP__lval_fun
-        {
-            id_type pos = get(index);
-            if(data[pos].ecnt == 0) return false;
-            data[pos].ecnt = 0;
-            --wcnt;
-            while(pos != rootid){
-              --data[pos].pcnt;
-              id_type par = data[pos].parent.index;
-              if(data[pos].pcnt == 0){
-                --ncnt;
-                data[par].child[data[pos].parent.value - lbound] = nposid;
-                reuse.push_back(pos);
-              }
-              pos = par;
-            }
-            --data[rootid].pcnt;
-            if(data[rootid].pcnt == 0)
-                --ncnt;
-            return true;
-        }
-        bool erase(const char *str, size_type len) ACHIBULUP__lval_fun
-        {
-            cursor index = find(str, len);
-            return index != npos && erase(index);
-        }
-        bool erase(string_view<char_t> strv) ACHIBULUP__lval_fun
-        {
-            return erase(strv.ptr, strv.len);
-        }
-
-    private :
         class data_t
         {
-        protected:
-            const node *base;
+          protected:
+            data_t() : base(), str() {}
+            data_t(const node &_base) 
+            : str(_base.get_prefix()), base(&_base) {}
 
-        public:
-            std::basic_string<char_t> word;
+          public:
+            std::string str;
 
-        protected:
-            data_t() : base(), word() {}
-            data_t(const node &_base) : base(&_base), word(_base.get_string()) {}
-
-        public:
-            bool is_end() const
+            bool is_word() const
             {
-                return base->is_end();
+                return base->is_word();
             }
 
             size_type as_end_count() const
@@ -399,9 +143,12 @@ namespace Achibulup
             {
                 return base->as_prefix_count();
             }
-        };
 
-    public:
+        protected:
+            const node *base;
+        };
+        
+      public:
         class const_iterator : private data_t
         {
         public:
@@ -412,11 +159,11 @@ namespace Achibulup
             typedef const data_t *pointer;
 
             const_iterator() : data_t() {}
-            const_iterator(const node &_base) : data_t(_base) {}
+            const_iterator(const node &nod) : data_t(nod) {}
 
-            const_iterator& operator ++ ()
+            const_iterator& operator ++()
             {
-                char_t curv = lbound;
+                char curv = lbound;
                 bool ok = false;
 
                 while(ok == false){
@@ -426,7 +173,7 @@ namespace Achibulup
                       const node *ptr = data_t::base->go_to(pos);
                       if(ptr->pcnt != 0){
                         data_t::base = ptr;
-                        data_t::word.push_back(curv);
+                        data_t::str.push_back(curv);
                         ok = true;
                         break;
                       }
@@ -438,29 +185,29 @@ namespace Achibulup
 
                   if(ok) break;
 
-                  while(data_t::base->index != rootid && data_t::base->parent.value == ubound){
-                    data_t::base = data_t::base->go_to(data_t::base->parent.index);
-                    data_t::word.pop_back();
+                  while(data_t::base->id != rootid && data_t::base->value == ubound){
+                    data_t::base = data_t::base->go_to(data_t::base->parent_id);
+                    data_t::str.pop_back();
                   }
-                  if(data_t::base->index == rootid){
+                  if(data_t::base->id == rootid){
                     data_t::base = data_t::base->go_to(nposid);
                     ok = true;
                     break;
                   }
-                  curv = data_t::base->parent.value + 1;
-                  data_t::base = data_t::base->go_to(data_t::base->parent.index);
-                  data_t::word.pop_back();
+                  curv = data_t::base->value + 1;
+                  data_t::base = data_t::base->go_to(data_t::base->parent_id);
+                  data_t::str.pop_back();
                 }
 
                 return *this;
             }
             const_iterator& operator -- ()
             {
-                char_t curv;
+                char curv;
                 if(data_t::base->index != nposid){
-                  curv = data_t::base->parent.value;
-                  data_t::base = data_t::base->go_to(data_t::base->parent.index);
-                  data_t::word.pop_back();
+                  curv = data_t::base->value;
+                  data_t::base = data_t::base->go_to(data_t::base->parent_id);
+                  data_t::str.pop_back();
                 }
                 else{
                   curv = ubound;
@@ -475,7 +222,7 @@ namespace Achibulup
                     if(pos != nposid){
                       const node *ptr = data_t::base->go_to(pos);
                       if(ptr->pcnt != 0){
-                        data_t::word.push_back(curv);
+                        data_t::str.push_back(curv);
                         curv = ubound;
                         data_t::base = ptr;
                         continue;
@@ -509,89 +256,345 @@ namespace Achibulup
                 return l.base != r.base;
             }
         };
-        typedef const_iterator iterator;
+        using iterator = const_iterator;
+        
 
-        const_iterator const_iterator_at(const cursor &index) const
+        Trie() : i_data(), i_reuse(), i_ncnt(0), i_wcnt(0)
         {
-            return const_iterator(data[get(index)]);
+            do_init();
         }
-        const_iterator iterator_at(const cursor &index) const
+
+        Trie(std::initializer_list<string_view> init_list) : Trie()
         {
-            return const_iterator_at(index);
+            for(string_view elem : init_list)
+              insert(elem);
         }
+
+        bool empty() const
+        {
+            return i_wcnt == 0;
+        }
+
+        size_type node_count() const
+        {
+            return i_ncnt;
+        }
+
+        size_type word_count() const
+        {
+            return i_wcnt;
+        }
+
+        void reserve(size_type count) &
+        {
+            i_data.reserve(count);
+        }
+
+        friend bool operator == (const Trie &l, const Trie &r)
+        {
+            if(&l == &r) return true;
+            return do_comp_tree(l.i_data[rootid], r.i_data[rootid]);
+        }
+        friend bool operator !=(const Trie &l, const Trie &r)
+        {
+            return !(l == r);
+        }
+
+        friend std::string to_string(const Trie &dict, char delim = '\n')
+        {
+            std::string res;
+            for(auto &&entry : dict)
+              if (entry.is_word()) {
+                if (!res.empty()) res.push_back(delim);
+                res += entry.str;
+              }
+            return res;
+        }
+        friend std::string to_string(const Trie &dict, std::string delim)
+        {
+            std::string res;
+            for(auto &&entry : dict)
+              if (entry.is_word()) {
+                if (!res.empty()) res += delim;
+                res += entry.str;
+              }
+            return res;
+        }
+
+        bool is_word(const cursor &pos) const
+        {
+            return do_at(pos).is_word();
+        }
+        size_type as_end_count(const cursor &pos) const
+        {
+            return do_at(pos).as_end_count();
+        }
+        size_type as_prefix_count(const cursor &pos) const
+        {
+            return do_at(pos).as_prefix_count();
+        }
+
+        cursor prev(const cursor &pos) const
+        {
+            return cursor(do_at(pos).parent_id);
+        }
+
+        cursor next(const cursor &pos, char val) const
+        {
+            return cursor(do_at(pos).next(val));
+        }
+
+        size_type prefix_length(const cursor &pos) const
+        {
+            return do_at(pos).prefix_length();
+        }
+
+        std::string get_prefix(const cursor &pos) const
+        {
+            return do_at(pos).get_prefix();
+        }
+
+        cursor insert(const char *str, size_type len) &
+        {
+            return insert({str, len});
+        }
+        cursor insert(string_view str) &
+        {
+            cursor cur = do_force_root();
+            for(char c : str)
+              cur = do_next_or_new_node(cur, c);
+            
+            cursor res = cur;
+            if(!do_at(res).ecnt){
+              do_at(res).ecnt = 1;
+              ++i_wcnt;
+              while(cur != root()){
+                if (!do_at(cur).pcnt++) ++i_ncnt;
+                cur = prev(cur);
+              }
+            }
+            return res;
+        }
+
+
+        cursor find(const char *str, size_type len) const
+        {
+            return find({str, len});
+        }
+        cursor find(string_view str) const
+        {
+            cursor res = find_prefix(str);
+            if (is_word(res)) return res;
+            return npos();
+        }
+
+        cursor find_prefix(const char *str, size_type len) const
+        {
+            return find_prefix({str, len});
+        }
+        cursor find_prefix(string_view str) const
+        {
+            if (empty()) return npos();
+            cursor cur = root();
+            for(char c : str)
+              if ((cur = next(cur, c)) == npos()) 
+                return npos();
+            return cur;
+        }
+
+        size_type count(const char *str, size_type len) const
+        {
+            return count({str,len});
+        }
+        size_type count(string_view str) const
+        {
+            return find(str) != npos() ? 1 : 0;
+        }
+        bool contains(const char *str, size_type len) const
+        {
+            return contains({str,len});
+        }
+        bool contains(string_view str) const
+        {
+            return count(str);
+        }
+
+        bool erase(cursor pos) &
+        {
+            if(do_at(pos).ecnt == 0) return false;
+            do_at(pos).ecnt = 0;
+            --i_wcnt;
+            while(pos != root()){
+              do_decrease_prefix_count(pos);
+              pos = prev(pos);
+            }
+            do_decrease_prefix_count(root());
+            return true;
+        }
+        bool erase(const char *str, size_type len) &
+        {
+            return erase({str, len});
+        }
+        bool erase(string_view str) &
+        {
+            cursor pos = find(str);
+            return pos != npos() && erase(pos);
+        }
+
+        cursor root() const
+        {
+            if (empty()) return npos();
+            return cursor(rootid);
+        }
+
+        cursor npos() const
+        {
+            return cursor(nposid);
+        }
+
         const_iterator cbegin() const
         {
-            if(data[rootid].pcnt == 0) return const_iterator(data[nposid]);
-            return const_iterator(data[rootid]);
+            return make_const_iterator(root());
         }
-        const_iterator begin() const
+        iterator begin() const
         {
             return cbegin();
         }
         const_iterator cend() const
         {
-            return iterator_at(npos);
+            return make_const_iterator(npos());
         }
-        const_iterator end() const
+        iterator end() const
         {
             return cend();
         }
+
+        const_iterator make_const_iterator(const cursor &cs) const
+        {
+            return const_iterator(do_at(cs));
+        }
+        iterator make_iterator(const cursor &cs) const
+        {
+            return const_iterator(do_at(cs));
+        }
+
+      private:
+        static const id_type rootid = 1;
+        static const id_type nposid = 0;
+
+        node& do_get_node(id_type id) &
+        {
+            return i_data[id];
+        }
+        const node& do_get_node(id_type id) const &
+        {
+            return i_data[id];
+        }
+
+        node& do_at(const cursor &pos) &
+        {
+            return do_get_node(do_get_id(pos));
+        }
+        const node& do_at(const cursor &pos) const &
+        {
+            return do_get_node(do_get_id(pos));
+        }
+
+        static id_type do_get_id(const cursor &pos)
+        {
+            return pos.i_value;
+        }
+
+        void do_init() &
+        {
+            i_data.clear();
+            i_data.emplace_back(nposid, nposid);
+            i_data.emplace_back(nposid, rootid);
+        }
+
+        cursor do_new_node(cursor parent, char val)
+        {
+            if(i_reuse.empty()){
+              id_type id = i_data.size();
+              i_data.push_back(node(do_get_id(parent), id, val));
+              ++i_ncnt;
+              return cursor(id);
+            }
+            
+            id_type id = i_reuse.back();
+            i_data[id].parent_id = do_get_id(parent);
+            i_data[id].value = val;
+            i_reuse.pop_back();
+            ++i_ncnt;
+            return cursor(id);
+        }
+
+        cursor do_next_or_new_node(const cursor &pos, char c) &
+        {
+            cursor res = next(pos, c);
+            if (res == npos()) {
+              res = do_new_node(pos, c);
+              do_at(pos).child[c - lbound] = do_get_id(res);
+            }
+            return res;
+        }
+
+        cursor do_force_root() &
+        {
+            if (empty()) {
+              ++i_ncnt;
+              ++do_get_node(rootid).pcnt;
+            }
+            return cursor(rootid);
+        }
+
+        void do_decrease_prefix_count(const cursor &pos) &
+        {
+            if (!--do_at(pos).pcnt)
+              do_recycle(pos);
+        }
+        void do_recycle(const cursor &pos) &
+        {
+            if (pos != root()) {
+              i_reuse.push_back(do_get_id(pos));
+              do_at(prev(pos)).child[do_at(pos).value - lbound] = nposid;
+            }
+            --i_ncnt;
+        }
+
+        static bool do_comp_tree(const node &l, const node &r)
+        {
+            if(l.ecnt != r.ecnt)
+              return false;
+            if(l.pcnt != r.pcnt)
+              return false;
+            for(size_type i = 0; i < char_range; ++i){
+              if ((l.child[i] == nposid) != (r.child[i] == nposid))
+                return false;
+              else if ((l.child[i] != nposid)
+                && (!do_comp_tree(*l.go_to(l.child[i]), *r.go_to(r.child[i]))))
+                  return false;
+            }
+            return true;
+        }
+
+
+
+        std::vector<node> i_data;
+        std::vector<id_type> i_reuse;
+        size_type i_ncnt;
+        size_type i_wcnt;
     };
-
-    template<typename char_t, char_t lbound, char_t ubound>
-    const typename Trie<char_t, lbound, ubound>::cursor Trie<char_t, lbound, ubound>::npos = cursor();
-
-
-    template<typename char_t, char_t lbound, char_t ubound>
-    bool operator == (const Trie<char_t, lbound, ubound> &l, const Trie<char_t, lbound, ubound> &r)
-    {
-        return Trie<char_t, lbound, ubound>::_equal(l, r);
-    }
-
-    template<typename char_t, char_t lbound, char_t ubound>
-    bool operator != (const Trie<char_t, lbound, ubound> &l, const Trie<char_t, lbound, ubound> &r)
-    {
-        return Trie<char_t, lbound, ubound>::_different(l, r);
-    }
-
-
-
-
-#if __cplusplus < 201103L
-    class nullptr_t
-    {
-        const void* const fill;
-
-    public:
-        nullptr_t() : fill() {}
-
-        template<typename Tp>
-        operator Tp* () const
-        {
-            typedef Tp *ptr;
-            return ptr();
-        }
-
-        template<typename Tp, class C>
-        operator Tp C::* () const
-        {
-            typedef Tp C::* ptr;
-            return ptr();
-        }
-
-        operator bool () const
-        {
-            return false;
-        }
-    };
-#define nullptr nullptr_t()
-
-#endif // __cplusplus
+    template<char l, char u>
+    const size_t Trie<l, u>::rootid;
+    template<char l, char u>
+    const size_t Trie<l, u>::nposid;
 
 
 
 
 
+/*
     template<typename char_t, char_t lbound = 0, char_t ubound = (~static_cast<char_t>(0)) ^ (1 << (sizeof(char_t) * CHAR_BIT - 1))>
     class Trie_beta
     {
@@ -599,12 +602,12 @@ namespace Achibulup
     public:
         typedef char_t char_type;
         typedef size_t size_type;
-        static const char_t value_lower_bound = lbound;
-        static const char_t value_upper_bound = ubound;
+        static const char_t char_lower_bound = lbound;
+        static const char_t char_upper_bound = ubound;
 
     private:
         struct Trie_access{};
-        static const size_type value_range = static_cast<size_type>(ubound - lbound) + 1;
+        static const size_type char_range = static_cast<size_type>(ubound - lbound) + 1;
         struct node
         {
             const struct parent_t{
@@ -616,7 +619,7 @@ namespace Achibulup
 
             bool ecnt;
             size_type pcnt;
-            node *child[value_range];
+            node *child[char_range];
 
             node() : parent(this, 0), ecnt(false), pcnt(0), child() {}
             node(node *par) : parent(par, 0), to_end(this), ecnt(false), pcnt(0), child() {}
@@ -649,7 +652,7 @@ namespace Achibulup
                 return res;
             }
 
-            std::basic_string<char_t> get_string() const
+            std::basic_string<char_t> get_prefix() const
             {
                 std::string res;
                 if(this != to_end){
@@ -666,12 +669,12 @@ namespace Achibulup
         };
 
         node *_root;
-        size_type ncnt;
-        size_type wcnt;
+        size_type i_ncnt;
+        size_type i_wcnt;
 
         node* get_next(node *parent, char_t val)
         {
-            ++ncnt;
+            ++i_ncnt;
             return new node(parent, val);
         }
 
@@ -685,7 +688,7 @@ namespace Achibulup
         {
             dest->ecnt = sour->ecnt;
             dest->pcnt = sour->pcnt;
-            for(size_type i = 0; i < value_range; ++i)
+            for(size_type i = 0; i < char_range; ++i)
               if(sour->child[i]){
                 dest->child[i] = new node(dest, lbound + i);
                 copy_tree(dest->child[i], sour->child[i]);
@@ -693,7 +696,7 @@ namespace Achibulup
         }
         static void destroy_tree(node *cur)
         {
-            for(size_type i = 0; i < value_range; ++i)
+            for(size_type i = 0; i < char_range; ++i)
               if(cur->child[i]) destroy_tree(cur->child[i]);
             delete cur;
         }
@@ -701,7 +704,7 @@ namespace Achibulup
         {
             dest->ecnt = sour->ecnt;
             dest->pcnt = sour->pcnt;
-            for(size_type i = 0; i < value_range; ++i){
+            for(size_type i = 0; i < char_range; ++i){
               if(sour->child[i]){
                 if(!dest->child[i])
                   dest->child[i] = new node(dest, lbound + i);
@@ -718,7 +721,7 @@ namespace Achibulup
               return false;
             if(l->pcnt != r->pcnt)
               return false;
-            for(size_type i = 0; i < value_range; ++i){
+            for(size_type i = 0; i < char_range; ++i){
               if(!l->child[i]){
                 if(r->child[i])
                   return false;
@@ -769,30 +772,30 @@ namespace Achibulup
 
     public:
 
-        Trie_beta() : _root(new node()), ncnt(0), wcnt(0)
+        Trie_beta() : _root(new node()), i_ncnt(0), i_wcnt(0)
         {
             init();
         }
 
-        Trie_beta(const Trie_beta &cpy) : _root(new node()), ncnt(cpy.ncnt), wcnt(cpy.wcnt)
+        Trie_beta(const Trie_beta &cpy) : _root(new node()), i_ncnt(cpy.i_ncnt), i_wcnt(cpy.i_wcnt)
         {
             init();
             copy_tree(_root, cpy._root);
         }
 
 #if __cplusplus >= 201103L
-        Trie_beta(Trie_beta &&mov) : _root(mov._root), ncnt(mov.ncnt), wcnt(mov.wcnt)
+        Trie_beta(Trie_beta &&mov) : _root(mov._root), i_ncnt(mov.i_ncnt), i_wcnt(mov.i_wcnt)
         {
             mov._root = new node();
             mov.init();
         }
 #endif // __cplusplus
 
-        Trie_beta& operator = (const Trie_beta &cpy) ACHIBULUP__lval_fun
+        Trie_beta& operator = (const Trie_beta &cpy) &
         {
             if(&cpy != this){
-              ncnt = cpy.ncnt;
-              wcnt = cpy.wcnt;
+              i_ncnt = cpy.i_ncnt;
+              i_wcnt = cpy.i_wcnt;
               assign_tree(_root, cpy._root);
             }
             return *this;
@@ -802,12 +805,12 @@ namespace Achibulup
         Trie_beta& operator = (Trie_beta &&mov) &
         {
             if(&mov != this){
-              size_type tn = ncnt;
-              ncnt = mov.ncnt;
-              mov.ncnt = tn;
-              size_type tw = wcnt;
-              wcnt = mov.wcnt;
-              mov.wcnt = tw;
+              size_type tn = i_ncnt;
+              i_ncnt = mov.i_ncnt;
+              mov.i_ncnt = tn;
+              size_type tw = i_wcnt;
+              i_wcnt = mov.i_wcnt;
+              mov.i_wcnt = tw;
               node *tr = _root;
               _root = mov._root;
               mov._root = tr;
@@ -828,12 +831,12 @@ namespace Achibulup
 
         size_type node_count() const
         {
-            return ncnt;
+            return i_ncnt;
         }
 
         size_type word_count() const
         {
-            return wcnt;
+            return i_wcnt;
         }
 
         static bool _equal(const Trie_beta &l, const Trie_beta &r)
@@ -875,12 +878,12 @@ namespace Achibulup
             return get(cs)->length();
         }
 
-        std::basic_string<char_t> get_string(const cursor &cs) const
+        std::basic_string<char_t> get_prefix(const cursor &cs) const
         {
-            return get(cs)->get_string();
+            return get(cs)->get_prefix();
         }
 
-        cursor insert(const char_t *str, size_type len) ACHIBULUP__lval_fun
+        cursor insert(const char_t *str, size_type len) &
         {
             node *cur = _root;
             for(size_type i = 0; i < len; ++i){
@@ -893,9 +896,9 @@ namespace Achibulup
             }
             node *res = cur;
             if(!cur->ecnt){
-              if(_root->pcnt == 0) ++ncnt;
+              if(_root->pcnt == 0) ++i_ncnt;
               cur->ecnt = true;
-              ++wcnt;
+              ++i_wcnt;
               while(1){
                 ++(cur->pcnt);
                 if(cur == _root) break;
@@ -904,13 +907,13 @@ namespace Achibulup
             }
             return to_cursor(res);
         }
-        cursor insert(string_view<char_t> strv) ACHIBULUP__lval_fun
+        cursor insert(string_view<char_t> strv) &
         {
             return insert(strv.ptr, strv.len);
         }
 
 #if __cplusplus >= 201103
-        Trie_beta(std::initializer_list<string_view<char_t>> init_list) : _root(new node()), ncnt(0), wcnt(0)
+        Trie_beta(std::initializer_list<string_view<char_t>> init_list) : _root(new node()), i_ncnt(0), i_wcnt(0)
         {
             init();
             for(const string_view<char_t> &elem : init_list)
@@ -943,16 +946,16 @@ namespace Achibulup
             return count(strv.ptr, strv.len);
         }
 
-        bool erase(const cursor &cs) ACHIBULUP__lval_fun
+        bool erase(const cursor &cs) &
         {
             node *pos = get(cs);
             if(pos->ecnt == 0) return false;
             pos->ecnt = 0;
-            --wcnt;
+            --i_wcnt;
             while(1){
               --(pos->pcnt);
               if(pos->pcnt == 0){
-                --ncnt;
+                --i_ncnt;
                 if(pos != _root){
                   size_type val = pos->parent.value - lbound;
                   pos = pos->parent.index;
@@ -967,12 +970,12 @@ namespace Achibulup
             }
             return true;
         }
-        bool erase(const char *str, size_type len) ACHIBULUP__lval_fun
+        bool erase(const char *str, size_type len) &
         {
             cursor cs = find(str, len);
             return cs != npos() && erase(cs);
         }
-        bool erase(string_view<char_t> strv) ACHIBULUP__lval_fun
+        bool erase(string_view<char_t> strv) &
         {
             return erase(strv.ptr, strv.len);
         }
@@ -988,7 +991,7 @@ namespace Achibulup
 
         protected:
             data_t(Trie_access) : base(), word() {}
-            data_t(const node *_base, Trie_access) : base(_base), word(_base->get_string()) {}
+            data_t(const node *_base, Trie_access) : base(_base), word(_base->get_prefix()) {}
 
         public:
             bool is_end() const
@@ -1154,8 +1157,7 @@ namespace Achibulup
     {
         return Trie_beta<char_t, lbound, ubound>::_different(l, r);
     }
-
-#undef ACHIBULUP__lval_fun
+*/
 }
 
 

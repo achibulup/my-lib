@@ -261,13 +261,9 @@ class uInt
         return this->i_size;
     }
 
-    void parse(str_arg str) &
+    void parse(string_view str) &
     {
         this->parse(str.data(), str.size());
-    }
-    void parse(const char *str) &
-    {
-        this->parse(str, strlen(str));
     }
     void parse(const char *str, size_t len) &
     {
@@ -1169,7 +1165,7 @@ inline uIntDivResult div(const uInt &divident, const uInt &divisor)
 }
 
 
-template<> uInt convert<uInt>(str_arg str)
+template<> uInt convert<uInt>(string_view str)
 {
     uInt res;
     res.parse(str);
@@ -1260,7 +1256,7 @@ class Int
     }
 
 
-    void parse(str_arg str) &
+    void parse(string_view str) &
     {
         this->parse(str.data(), str.size());
     }
@@ -1486,7 +1482,7 @@ IntDivResult div(const Int &lhs, const Int &rhs)
 
 
 
-template<> Int convert<Int>(str_arg str)
+template<> Int convert<Int>(string_view str)
 {
     Int res;
     res.parse(str);
