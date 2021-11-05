@@ -4,6 +4,11 @@
 #include "common_utils.h"
 
 namespace Achibulup{
+#if ACHIBULUP__Cpp17_later
+using std::byte;
+#else
+using byte = unsigned char;
+#endif
 
 template<typename Tp>
 inline constexpr Tp* Launder(Tp *ptr) noexcept
@@ -426,19 +431,17 @@ template<typename Tp>
 inline RelaxedPtr<Tp> new_buffer(size_t s)
 {
     if(s < 0) throw std::bad_alloc();
-    return s ? static_cast<Tp*>(static_cast<copy_cvref_t<Tp, void>*>
-                   (new byte[s * ssizeof<Tp>()])) 
+    return s ? static_cast<Tp*>(static_cast<void*>(new byte[s * ssizeof<Tp>()])) 
              : nullptr;
 }
 inline RelaxedPtr<void> new_buffer(size_t s)
 {
-    if(s < 0) throw std::bad_alloc();
-    return s ? new unsigned char[s] : nullptr;
+    return new_buffer<byte>(s);
 }
 template<typename Tp>
 inline void delete_buffer(RelaxedPtr<Tp> ptr)
 {
-    delete[] static_cast<copy_cvref_t<Tp, unsigned char>*>
+    delete[] static_cast<copy_cvref_t<Tp, byte>*>
         (static_cast<copy_cvref_t<Tp, void>*>(ptr));
 }
 

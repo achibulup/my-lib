@@ -103,15 +103,8 @@ class IntData
 
     void reset(size_type new_cap)
     {
-        if(new_cap > this->capacity)
+        if(new_cap > this->capacity())
           *this = IntData(new_cap);
-    }
-
-
-    void zero_init(size_type start, size_type len)
-    {
-        if (len != 0)
-          memset(this->i_data + start, 0, len * sizeof(base_type));
     }
 
 
@@ -201,22 +194,22 @@ struct uIntDivResult;
 class uInt
 {
   public:
-    uInt() noexcept : i_data(), i_size(0)  {}
+    uInt() noexcept : i_data(), size(0)  {}
 
     ///when you want to reuse resources you might not want to implement assignment in term of constructor
     uInt(std::uintmax_t val) : uInt()
     { *this = val; }
 
     uInt(uInt &&mov) noexcept 
-    : i_data(Move(mov.i_data)), i_size(Move(mov.i_size)) {}
+    : i_data(Move(mov.i_data)), size(Move(mov.size)) {}
 
-    uInt(const uInt &cpy) : uInt(cpy.i_size, 0)
+    uInt(const uInt &cpy) : uInt(cpy.size(), 0)
     { *this = cpy; }
 
     uInt& operator = (std::uintmax_t val) &
     {
         if (val != 0)
-          this->i_data.reset(5);
+          this->reset(5);
         this->clear();
         while(val > 0){
           this->unsafe_push_back(val % k_Base);
@@ -236,7 +229,7 @@ class uInt
     uInt& operator = (const uInt &cpy) &
     {
         if (this != &cpy) {
-          this->i_data.reset(cpy.i_size);
+          this->reset(cpy.size());
           unsafe_copy_data(*this, cpy);
         }
         return *this;
@@ -244,9 +237,7 @@ class uInt
 
     friend void swap(uInt &a, uInt &b) noexcept
     {
-        using std::swap;
-        swap(a.i_data, b.i_data);
-        swap(a.i_size, b.i_size);
+        uInt::swap(a, b);
     }
     
     ///downcasts to smaller primitive integers
@@ -258,24 +249,22 @@ class uInt
 
     explicit operator bool() const
     {
-        return this->i_size;
+        return this->size();
     }
 
-    void parse(string_view str) &
+    uInt& parse(string_view strv) &
     {
-        this->parse(str.data(), str.size());
-    }
-    void parse(const char *str, size_t len) &
-    {
+        const char *str = strv.data();
+        auto len = strv.size();
         while(len > 0 && *str == '0')
         { ++str; --len; }
         if (len == 0) 
-        { this->clear(); return; }
+        { this->clear(); return *this; }
 
         size_type estimate_size = 
          std::ceil((std::log2(n_Int_helper::ten) / k_BaseBinDigit + .00001) * len);
         estimate_size += 2;
-        this->i_data.reset(estimate_size);
+        this->reset(estimate_size);
         this->clear();
 
         size_type start = (len - 1) % k_ioDecDigit + 1;
@@ -285,8 +274,13 @@ class uInt
           unsafe_add(*this, str_to_base(str + start, k_ioDecDigit), this);
           start += k_ioDecDigit;
         }
-
+        return *this;
     }
+    uInt&& parse(string_view strv) &&
+    {
+        return std::move(this->parse(strv));
+    }
+
 
     friend std::string to_string(uInt x)
     {
@@ -323,19 +317,17 @@ class uInt
     friend bool operator >= (const uInt &l, const uInt &r)
     { return !(l < r); }
     
-    friend uInt operator + (uInt);
-    
     uInt& operator ++() &
     {
-        for(size_type i = 0; i < this->i_size; ++i) {
-          if (this->i_data[i] == k_Base - 1)
-            this->i_data[i] = 0;
+        for(size_type i = 0; i < this->size(); ++i) {
+          if ((*this)[i] == k_Base - 1)
+            (*this)[i] = 0;
           else {
-            ++(this->i_data[i]);
+            ++(*this)[i];
             return *this;
           }
         }
-        if (this->i_size == this->i_data.capacity)
+        if (this->size() == this->capacity())
           this->increment_safe_reserve();
         this->unsafe_push_back(1);
         return *this;
@@ -350,13 +342,13 @@ class uInt
     uInt& operator --() &
     {
         if (!*this) n_Int_helper::throw_unsigned_integer_underflow_exception();
-        for(size_type i = 0; i < this->i_size; ++i) {
-          if (this->i_data[i] == 0)
-            this->i_data[i] = k_Base - 1;
+        for(size_type i = 0; i < this->size(); ++i) {
+          if ((*this)[i] == 0)
+            (*this)[i] = k_Base - 1;
           else {
-            --(this->i_data[i]);
-            if (i == this->i_size - 1 && this->i_data[i] == 0)
-              --(this->i_size);
+            --(*this)[i];
+            if (i == this->size() - 1 && (*this)[i] == 0)
+              this->pop_back();
             return *this;
           }
         }
@@ -385,11 +377,11 @@ class uInt
     }
     friend uInt operator + (uInt &&lhs, uInt &&rhs)
     {
-        if (&lhs == &rhs && lhs.i_data.capacity >= max_sum_size(lhs, lhs)) {
+        if (&lhs == &rhs && lhs.capacity() >= max_sum_size(lhs, lhs)) {
           unsafe_add(lhs, lhs, &lhs);
           return std::move(lhs);
         }
-        if (lhs.i_data.capacity < rhs.i_data.capacity) 
+        if (lhs.capacity() < rhs.capacity()) 
           return plus(lhs, std::move(rhs));
         return plus(rhs, std::move(lhs));
     }
@@ -428,8 +420,8 @@ class uInt
     friend bool getbit(const uInt &x, size_t pos) noexcept
     {
         auto dec = decompose(pos);
-        if (dec.unit >= x.i_size) return false;
-        return x.i_data[dec.unit] & (static_cast<base_type>(1u) << dec.digit);
+        if (dec.unit >= x.size()) return false;
+        return x[dec.unit] & (static_cast<base_type>(1u) << dec.digit);
     }
 
     friend uInt operator & (const uInt &lhs, const uInt &rhs)
@@ -468,7 +460,7 @@ class uInt
     }
     friend uInt operator | (uInt &&lhs, uInt &&rhs)
     {
-        if(lhs.i_data.capacity < rhs.i_data.capacity)
+        if(lhs.capacity() < rhs.capacity())
           return lhs | std::move(rhs);
         return rhs | std::move(lhs);
     }
@@ -489,7 +481,7 @@ class uInt
     }
     friend uInt operator ^ (uInt &&lhs, uInt &&rhs)
     {
-        if(lhs.i_data.capacity < rhs.i_data.capacity)
+        if(lhs.capacity() < rhs.capacity())
           return lhs ^ std::move(rhs);
         return rhs ^ std::move(lhs);
     }
@@ -512,7 +504,7 @@ class uInt
     }
     friend uInt operator << (uInt &&lhs, size_t rhs)
     {
-        if(lhs.i_data.capacity < max_shl_size(lhs, rhs))
+        if(lhs.capacity() < max_shl_size(lhs, rhs))
           return lhs << rhs;
         unsafe_shl(lhs, rhs, &lhs);
         return std::move(lhs);
@@ -555,6 +547,8 @@ class uInt
     using base_type = n_Int_helper::base_type;
     using calc_type = n_Int_helper::calc_type;
     using wcalc_type = n_Int_helper::wcalc_type;
+    using const_pointer = n_Int_helper::IntData::const_pointer;
+    using pointer = n_Int_helper::IntData::pointer;
 
     static constexpr int k_BaseBinDigit = 30;
     static constexpr base_type k_Base = 1u << k_BaseBinDigit;
@@ -567,43 +561,42 @@ class uInt
 
     class SegView
     {
-        using size_type = n_Int_helper::size_type;
-
       public:
+        using size_type = size_type;
+        using const_pointer = n_Int_helper::IntData::const_pointer;
+
         SegView() = delete;
       
         SegView(const uInt &s, size_type start = 0) noexcept
-        : i_start(s.i_data.begin() + start), size(s.i_size - start) {}
+        : begin(s.begin() + start), size(s.size() - start) {}
         SegView(const uInt &s, size_type start, size_type len) noexcept
-        : i_start(s.i_data.begin() + start), size(len) {}
+        : begin(s.begin() + start), size(len) {}
 
-        SegView(const base_type &b) noexcept : i_start(&b), size(!!b) {}
+        SegView(const base_type &b) noexcept : begin(&b), size(!!b) {}
 
         SegView(SegView s, size_type start) noexcept
-        : i_start(s.i_start + start), size(s.size - start) {}
+        : begin(s.cbegin() + start), size(s.size() - start) {}
         SegView(SegView s, size_type start, size_type len) noexcept
-        : i_start(s.i_start + start), size(len) {}
+        : begin(s.cbegin() + start), size(len) {}
+        
 
         base_type operator[] (size_type i) const
         {
-            return this->i_start[i];
+            return this->cbegin()[i];
         }
 
-
-        n_Int_helper::IntData::const_pointer cbegin() const
+        const_pointer cbegin() const
         {
-            return this->i_start;
+            return this->begin();
         }
-        auto begin() const -> decltype(this->cbegin())
-        {
-            return this->cbegin();
-        }
+        const ReadOnlyProperty<const_pointer, SegView> begin;
+        const ReadOnlyProperty<size_type, SegView> size;
 
 
         friend bool operator == (SegView lhs, SegView rhs)
         {
-            if (lhs.size != rhs.size) return false;
-            for(size_type i = lhs.size; i-- > 0;)
+            if (lhs.size() != rhs.size()) return false;
+            for(size_type i = lhs.size(); i-- > 0;)
               if (lhs[i] != rhs[i]) return false;
             return true;
         }
@@ -613,9 +606,9 @@ class uInt
         }
         friend bool operator < (SegView lhs, SegView rhs)
         {
-            if (lhs.size != rhs.size) 
-              return lhs.size < rhs.size;
-            for(size_type i = lhs.size; i-- > 0;)
+            if (lhs.size() != rhs.size()) 
+              return lhs.size() < rhs.size();
+            for(size_type i = lhs.size(); i-- > 0;)
               if (lhs[i] != rhs[i]) 
                 return lhs[i] < rhs[i];
             return false;
@@ -637,9 +630,9 @@ class uInt
         wcalc_type msd(size_type start) const
         {
             size_type start_unit = start / k_BaseBinDigit;
-            if(this->size <= start_unit) return 0;
+            if(this->size() <= start_unit) return 0;
             wcalc_type res = 0;
-            size_type i = this->size;
+            size_type i = this->size();
             while(i--)
             {
               if(i * k_BaseBinDigit <= start){
@@ -656,18 +649,15 @@ class uInt
 
         size_type digit_count() const
         {
-            if(this->size == 0) return 0;
-            size_type res = k_BaseBinDigit * (this->size - 1);
-            for(calc_type tmp = (*this)[this->size - 1]; tmp > 0; tmp >>= 1)
+            if(this->size() == 0) return 0;
+            size_type res = k_BaseBinDigit * (this->size() - 1);
+            for(calc_type tmp = (*this)[this->size() - 1]; tmp > 0; tmp >>= 1)
               ++res;
             return res;
         }
         
-      private:
-        const n_Int_helper::IntData::const_pointer i_start;
 
       public:
-        const size_type size;
     }; //SegView
 
     struct decompose_result
@@ -681,19 +671,25 @@ class uInt
     }
 
 
-    uInt(size_type cap, size_type s) : i_data(cap), i_size(s) {}
+    uInt(size_type cap, size_type s) : i_data(cap), size(s) {}
 
-    uInt(uInt &cpy, size_type cap) : i_data(cap), i_size(cpy.i_size) 
+    uInt(uInt &cpy, size_type cap) : i_data(cap), size(cpy.size()) 
     {
         *this = cpy;
     }
 
+    static void swap(uInt &a, uInt &b) noexcept
+    {
+        using std::swap;
+        swap(a.i_data, b.i_data);
+        swap(a.size.value, b.size.value);
+    }
     
     static std::uintmax_t down_cast(const uInt &x) noexcept
     {
         std::uintmax_t res = 0;
-        for(size_type i = x.i_size; i-- > 0;)
-          res = res * k_Base + x.i_data[i];
+        for(size_type i = x.size(); i-- > 0;)
+          res = res * k_Base + x[i];
         return res;
     }
 
@@ -714,7 +710,7 @@ class uInt
     }
     static uInt plus(SegView lhs, uInt &&rhs)
     {
-        if (rhs.i_data.capacity < max_sum_size(lhs, rhs))
+        if (rhs.capacity() < max_sum_size(lhs, rhs))
           return plus(lhs, rhs);
         unsafe_add(lhs, rhs, &rhs);
         return std::move(rhs);
@@ -728,7 +724,7 @@ class uInt
     }
     static uInt minus(SegView lhs, uInt &&rhs)
     {
-        if (rhs.i_data.capacity < max_dif_size(lhs, rhs))
+        if (rhs.capacity() < max_dif_size(lhs, rhs))
           return minus(lhs, rhs);
         unsafe_subtract(lhs, rhs, &rhs);
         return std::move(rhs);
@@ -742,10 +738,10 @@ class uInt
     ///ordered means lhs.size >= rhs.size
     static uInt product(SegView lhs, SegView rhs)
     {
-        if(lhs.size < rhs.size) return product(rhs, lhs);
-        // std::cout << indent << lhs.size << ' ' << rhs.size << '\n';
+        if(lhs.size() < rhs.size()) return product(rhs, lhs);
+        // std::cout << indent << lhs.size() << ' ' << rhs.size() << '\n';
         // autoindent aut;
-        if (exceed_threshold(lhs.size, rhs.size))
+        if (exceed_threshold(lhs.size(), rhs.size()))
           return big_ordered_product(lhs, rhs);
         return small_ordered_product(lhs, rhs);
     }
@@ -760,18 +756,18 @@ class uInt
     static uInt big_ordered_product(SegView lhs, SegView rhs)
     {
         uInt res(max_prod_size(lhs, rhs), 0);
-        size_type half = (lhs.size + 1) / 2;
+        size_type half = (lhs.size() + 1) / 2;
 
-        if (rhs.size <= half) {
+        if (rhs.size() <= half) {
           uInt res1 = product(SegView(lhs, 0, half), rhs);
           uInt res2 = product(SegView(lhs, half), rhs);
           unsafe_copy_data(res, res1);
-          res.i_size = res.i_data.capacity;
-          res.i_data.zero_init(res1.i_size, res.i_data.capacity - res1.i_size);
-          for(size_type i = 0; i < res2.i_size; ++i)
-            if ((res.i_data[i + half] += res2.i_data[i]) >= k_Base) { 
-              res.i_data[i + half] -= k_Base;
-              ++res.i_data[i + half + 1];
+          res.size = res.capacity();
+          res.zero_fill(res1.size(), res.size() - res1.size());
+          for(size_type i = 0; i < res2.size(); ++i)
+            if ((res[i + half] += res2[i]) >= k_Base) { 
+              res[i + half] -= k_Base;
+              ++res[i + half + 1];
             }
           res.trim_zero();
         }
@@ -786,22 +782,22 @@ class uInt
           unsafe_subtract(res2, res1, &res2);
           unsafe_subtract(res2, res3, &res2);
 
-          res.i_size = res.i_data.capacity;
+          res.size = res.capacity();
           calc_type tmp = 0, carry = 0;
-          for(size_type i = 0; i < res.i_size; ++i){
+          for(size_type i = 0; i < res.size(); ++i){
             tmp = carry;
             carry = 0;
-            if(i < res1.i_size) 
-              tmp += res1.i_data[i];
-            if(half <= i && i < half + res2.i_size)
-              tmp += res2.i_data[i - half];
-            if(half * 2 <= i && i < half * 2 + res3.i_size)
-              tmp += res3.i_data[i - half * 2];
+            if(i < res1.size()) 
+              tmp += res1[i];
+            if(half <= i && i < half + res2.size())
+              tmp += res2[i - half];
+            if(half * 2 <= i && i < half * 2 + res3.size())
+              tmp += res3[i - half * 2];
             while (tmp >= k_Base){
               tmp -= k_Base;
               ++carry;
             }
-            res.i_data[i] = tmp;
+            res[i] = tmp;
           }
           res.trim_zero();
         }
@@ -812,14 +808,14 @@ class uInt
     /// schoolbook algorithm
     static uInt small_ordered_product(SegView lhs, SegView rhs)
     {
-        uInt res(max_prod_size(lhs, rhs), lhs.size);
-        res.i_data.zero_init(0, lhs.size);
-        for(size_type i = 0; i < rhs.size; ++i){
+        uInt res(max_prod_size(lhs, rhs), lhs.size());
+        res.zero_fill(0, lhs.size());
+        for(size_type i = 0; i < rhs.size(); ++i){
           wcalc_type tmp = 0;
           wcalc_type cur_digit = rhs[i];
-          for(size_type j = 0; j < lhs.size; ++j){
-            tmp += lhs[j] * cur_digit + res.i_data[j + i];
-            res.i_data[j + i] = tmp & (k_Base - 1);
+          for(size_type j = 0; j < lhs.size(); ++j){
+            tmp += lhs[j] * cur_digit + res[j + i];
+            res[j + i] = tmp & (k_Base - 1);
             tmp >>= k_BaseBinDigit;
           }
           res.unsafe_push_back(tmp);
@@ -838,7 +834,7 @@ class uInt
              std::min<calc_type>(k_Base - 1, (lhs_msd + 1) / rhs_msd);
         uInt remainder;
         if(rem) swap(remainder, *rem);
-        remainder.i_data.reset(rhs.i_size + 1);
+        remainder.reset(rhs.size() + 1);
         unsafe_small_mult(rhs, quotient, &remainder);
         while(remainder > lhs){
           --quotient;
@@ -857,7 +853,7 @@ class uInt
     static uInt small_modulo(SegView lhs, wcalc_type rhs)
     {
         wcalc_type rem = 0;
-        for(size_type i = lhs.size; i-- > 0;)
+        for(size_type i = lhs.size(); i-- > 0;)
           rem = ((rem << k_BaseBinDigit) + lhs[i]) % rhs;
         return rem;
     }
@@ -867,44 +863,44 @@ class uInt
     //res may point to lhs or rhs
     static void unsafe_add(SegView lhs, SegView rhs, uInt *res)
     {
-        if(lhs.size < rhs.size) return unsafe_add(rhs, lhs, res);
+        if(lhs.size() < rhs.size()) return unsafe_add(rhs, lhs, res);
         calc_type tmp = 0, carry = 0;
-        for(size_type i = 0; i < lhs.size; ++i) {
+        for(size_type i = 0; i < lhs.size(); ++i) {
           tmp = lhs[i] + carry;
-          if (i < rhs.size) tmp += rhs[i];
+          if (i < rhs.size()) tmp += rhs[i];
           carry = tmp >> k_BaseBinDigit;
           tmp &= k_Base - 1;
-          res->i_data[i] = tmp;
+          (*res)[i] = tmp;
         }
-        res->i_data[lhs.size] = carry;
-        res->i_size = lhs.size + carry;
+        (*res)[lhs.size()] = carry;
+        res->size = lhs.size() + carry;
     }
     static void unsafe_subtract(SegView lhs, SegView rhs, uInt *res)
     {
-        if (lhs.size < rhs.size)
+        if (lhs.size() < rhs.size())
           n_Int_helper::throw_unsigned_integer_underflow_exception();
         calc_type tmp = 0, carry = 0;
-        for(size_type i = 0; i < lhs.size; ++i) {
+        for(size_type i = 0; i < lhs.size(); ++i) {
           tmp = k_Base + lhs[i] - carry;
-          if (i < rhs.size) tmp -= rhs[i];
+          if (i < rhs.size()) tmp -= rhs[i];
           carry = !(tmp >> k_BaseBinDigit);
           tmp &= k_Base - 1;
-          res->i_data[i] = tmp;
+          (*res)[i] = tmp;
         }
         if (carry)
           n_Int_helper::throw_unsigned_integer_underflow_exception();
-        res->i_size = lhs.size;
+        res->size = lhs.size();
         res->trim_zero();
     }
     static void unsafe_small_mult(SegView lhs, calc_type rhs, uInt *res)
     {
         wcalc_type tmp = 0, r = rhs;
-        for(size_type i = 0; i < lhs.size; ++i){
+        for(size_type i = 0; i < lhs.size(); ++i){
           tmp += r * lhs[i];
-          res->i_data[i] = tmp & (k_Base - 1);
+          (*res)[i] = tmp & (k_Base - 1);
           tmp >>= k_BaseBinDigit;
         }
-        res->i_size = lhs.size;
+        res->size = lhs.size();
         if (tmp != 0) res->unsafe_push_back(tmp);
         res->trim_zero();
     }
@@ -912,78 +908,78 @@ class uInt
     unsafe_small_divide(SegView lhs, wcalc_type rhs, uInt *quo)
     {
         wcalc_type rem = 0;
-        for(size_type i = lhs.size; i-- > 0;){
+        for(size_type i = lhs.size(); i-- > 0;){
           rem = (rem << k_BaseBinDigit) + lhs[i];
-          rem = rem - rhs * (quo->i_data[i] = rem / rhs);
+          rem = rem - rhs * ((*quo)[i] = rem / rhs);
         }
-        quo->i_size = lhs.size;
+        quo->size = lhs.size();
         quo->trim_zero();
         return rem;
     }
     static void unsafe_and(const uInt &lhs, const uInt &rhs, uInt *res)
     {
-        if(lhs.i_size > rhs.i_size) return unsafe_and(rhs, lhs, res);
-        for(size_type i = 0; i < lhs.i_size; ++i)
-          res->i_data[i] = lhs.i_data[i] & rhs.i_data[i]; 
-        res->i_size = lhs.i_size;
+        if(lhs.size() > rhs.size()) return unsafe_and(rhs, lhs, res);
+        for(size_type i = 0; i < lhs.size(); ++i)
+          (*res)[i] = lhs[i] & rhs[i]; 
+        res->size = lhs.size();
         res->trim_zero();
     }
     static void unsafe_or(const uInt &lhs, const uInt &rhs, uInt *res)
     {
-        if(lhs.i_size < rhs.i_size) return unsafe_or(rhs, lhs, res);
-        for(size_type i = 0; i < lhs.i_size; ++i)
-          res->i_data[i] = lhs.i_data[i] | (i < rhs.i_size ? rhs.i_data[i] : 0); 
-        res->i_size = lhs.i_size;
+        if(lhs.size() < rhs.size()) return unsafe_or(rhs, lhs, res);
+        for(size_type i = 0; i < lhs.size(); ++i)
+          (*res)[i] = lhs[i] | (i < rhs.size() ? rhs[i] : 0); 
+        res->size = lhs.size();
     }
     static void unsafe_xor(const uInt &lhs, const uInt &rhs, uInt *res)
     {
-        if(lhs.i_size < rhs.i_size) return unsafe_xor(rhs, lhs, res);
-        for(size_type i = 0; i < lhs.i_size; ++i)
-          res->i_data[i] = lhs.i_data[i] ^ (i < rhs.i_size ? rhs.i_data[i] : 0); 
-        res->i_size = lhs.i_size;
+        if(lhs.size() < rhs.size()) return unsafe_xor(rhs, lhs, res);
+        for(size_type i = 0; i < lhs.size(); ++i)
+          (*res)[i] = lhs[i] ^ (i < rhs.size() ? rhs[i] : 0); 
+        res->size = lhs.size();
         res->trim_zero();
     }
     static void unsafe_shr(const uInt &lhs, size_t rhs, uInt *res)
     {
         if (rhs < 0) throw std::invalid_argument("invalid argument");
         auto dec = decompose(rhs);
-        if(lhs.i_size < dec.unit) {}
+        if(lhs.size() < dec.unit) {}
         else if (dec.digit == 0) {
-          if(dec.unit || (lhs.i_data.cbegin() != res->i_data.begin()))
-            std::copy_n(lhs.i_data.cbegin() + dec.unit, 
-                        lhs.i_size - dec.unit, res->i_data.begin());
+          if(dec.unit || (lhs.cbegin() != res->cbegin()))
+            std::copy_n(lhs.cbegin() + dec.unit, 
+                        lhs.size() - dec.unit, res->begin());
         }
         else {
-          res->i_data[0] = lhs.i_data[dec.unit] >> dec.digit;
-          for(size_type i = dec.unit + 1; i < lhs.i_size; ++i){
-            res->i_data[i - dec.unit - 1] 
-             |= (lhs.i_data[i] << (k_BaseBinDigit - dec.digit)) & (k_Base - 1);
-            res->i_data[i - dec.unit] = lhs.i_data[i] >> dec.digit;
+          (*res)[0] = lhs[dec.unit] >> dec.digit;
+          for(size_type i = dec.unit + 1; i < lhs.size(); ++i){
+            (*res)[i - dec.unit - 1] 
+             |= (lhs[i] << (k_BaseBinDigit - dec.digit)) & (k_Base - 1);
+            (*res)[i - dec.unit] = lhs[i] >> dec.digit;
           }
         }
-        res->i_size = max_shr_size(lhs, rhs);
+        res->size = max_shr_size(lhs, rhs);
         res->trim_zero();
     }
     static void unsafe_shl(const uInt &lhs, size_t rhs, uInt *res)
     {
         if (rhs < 0) throw std::invalid_argument("invalid argument");
         auto dec = decompose(rhs);
-        res->i_data.zero_init(0, dec.unit);
+        res->zero_fill(0, dec.unit);
         if (dec.digit == 0) {
-          if(dec.unit || (lhs.i_data.cbegin() != res->i_data.begin()))
-            std::copy_n(lhs.i_data.cbegin(), 
-                        lhs.i_size, res->i_data.begin() + dec.unit);
+          if(dec.unit || (lhs.cbegin() != res->cbegin()))
+            std::copy_n(lhs.cbegin(), 
+                        lhs.size(), res->begin() + dec.unit);
         }
         else {
-          res->i_data[lhs.i_size + dec.unit + 1] = 0;
-          for(size_type i = lhs.i_size; i-- > 0;){
-            res->i_data[i + dec.unit + 1] |=
-              lhs.i_data[i] >> (k_BaseBinDigit - dec.digit);
-            res->i_data[i + dec.unit] = 
-              (lhs.i_data[i] << dec.digit) & (k_Base - 1);
+          (*res)[lhs.size() + dec.unit + 1] = 0;
+          for(size_type i = lhs.size(); i-- > 0;){
+            (*res)[i + dec.unit + 1] |=
+              lhs[i] >> (k_BaseBinDigit - dec.digit);
+            (*res)[i + dec.unit] = 
+              (lhs[i] << dec.digit) & (k_Base - 1);
           }
         }
-        res->i_size = max_shl_size(lhs, rhs);
+        res->size = max_shl_size(lhs, rhs);
         res->trim_zero();
     }
 
@@ -991,41 +987,45 @@ class uInt
 
     static size_type max_sum_size(SegView lhs, SegView rhs)
     {
-        return std::max(lhs.size, rhs.size) + 1;
+        return std::max(lhs.size(), rhs.size()) + 1;
     }
     static size_type max_dif_size(SegView lhs, SegView rhs)
     {
-        return lhs.size;
+        return lhs.size();
     }
     static size_type max_prod_size(SegView lhs, SegView rhs)
     {
-        return lhs.size + rhs.size;
+        return lhs.size() + rhs.size();
     }
     static size_type max_div_quo_size(SegView lhs, wcalc_type rhs)
     {
-        return lhs.size;
+        return lhs.size();
     }
     static size_type max_and_size(const uInt &lhs, const uInt &rhs)
     {
-        return std::min(lhs.i_size, rhs.i_size);
+        return std::min(lhs.size(), rhs.size());
     }
     static size_type max_or_size(const uInt &lhs, const uInt &rhs)
     {
-        return std::max(lhs.i_size, rhs.i_size);
+        return std::max(lhs.size(), rhs.size());
     }
     static size_type max_xor_size(const uInt &lhs, const uInt &rhs)
     {
-        return std::max(lhs.i_size, rhs.i_size);
+        return std::max(lhs.size(), rhs.size());
     }
     static size_type max_shr_size(const uInt &lhs, size_t rhs)
     {
-        return std::max<base_type>(lhs.i_size - rhs / k_BaseBinDigit, 0);
+        return std::max<base_type>(lhs.size() - rhs / k_BaseBinDigit, 0);
     }
     static size_type max_shl_size(const uInt &lhs, size_t rhs)
     {
-        return lhs.i_size + (rhs + k_BaseBinDigit - 1) / k_BaseBinDigit;
+        return lhs.size() + (rhs + k_BaseBinDigit - 1) / k_BaseBinDigit;
     }
     
+
+
+
+
 
     ///most significant digits
     wcalc_type msd(size_type start) const
@@ -1041,44 +1041,76 @@ class uInt
 
     void trim_zero()
     {
-        while(this->i_size > 0 && this->back() == 0)
-          --this->i_size;
+        while(this->size() > 0 && this->back() == 0)
+          this->pop_back();
     }
     bool is_small_divisor() const
     {
-        return this->i_size <= 2 && down_cast(*this) < k_SmallDivisorLimit;
+        return this->size() <= 2 && down_cast(*this) < k_SmallDivisorLimit;
     }
+
     static void copy_and_shift(uInt &dest, SegView src)
     {
-        std::copy_n(src.cbegin(), src.size, dest.i_data.begin() + 1);
-        dest.i_size = src.size + 1;
+        std::copy_n(src.cbegin(), src.size(), dest.begin() + 1);
+        dest.size = src.size() + 1;
     }
     static void unsafe_copy_data(uInt &dest, SegView src)
     {
-        std::copy_n(src.cbegin(), src.size, dest.i_data.begin());
-        dest.i_size = src.size;
+        std::copy_n(src.cbegin(), src.size(), dest.begin());
+        dest.size = src.size();
     }
 
+    void zero_fill(size_type start, size_type len)
+    {
+        if (len != 0)
+          memset(this->begin() + start, 0, len * sizeof(base_type));
+    }
+
+    base_type& operator [] (size_type idx) &
+    {
+        return this->i_data[idx];
+    }
+    base_type operator [] (size_type idx) const &
+    {
+        return this->i_data[idx];
+    }
 
     base_type back() const
     {
-        return this->i_data[this->i_size - 1];
+        return (*this)[this->size() - 1];
     }
   
     void unsafe_push_back(base_type c)
     {
-        this->i_data[this->i_size++] = c;
+        (*this)[this->size++] = c;
+    }
+    void pop_back()
+    {
+        --this->size;
+    }
+
+    pointer begin() &
+    {
+        return this->i_data.begin();
+    }
+    const_pointer cbegin() const &
+    {
+        return this->i_data.cbegin();
+    }
+    const_pointer begin() const &
+    {
+        return this->cbegin();
     }
 
 
     ///reserve(capacity + 1) 
-    ///rewind the effect of ++ if exception occurs
+    ///reverse the effect of ++ if an exception is thrown
     void increment_safe_reserve()
     {
-        try{this->reserve(this->i_data.capacity + 1);}
+        try{this->reserve(this->capacity() + 1);}
         catch(...) {
-          for(size_type i = 0; i < this->i_size; ++i)
-            this->i_data[i] = k_Base - 1;
+          for(size_type i = 0; i < this->size(); ++i)
+            (*this)[i] = k_Base - 1;
           throw;
         }
     }
@@ -1086,27 +1118,28 @@ class uInt
 
     void clear()
     {
-        this->i_size = 0;
+        this->size = 0;
     }
-
+    void reset(size_type cap)
+    {
+        this->i_data.reset(cap);
+        this->clear();
+    }
     void reserve(size_type cap)
     {
-        if (this->i_data.capacity < cap)
+        if (this->capacity() < cap)
           *this = uInt(*this, cap);
     }
-  
+    size_type capacity() const
+    {
+        return this->i_data.capacity();
+    }
 
 
 
     n_Int_helper::IntData i_data;
-    size_type i_size;
+    ReadOnlyProperty<size_type, uInt> size;
 };
-
-
-inline uInt operator + (uInt x)
-{
-    return x;
-}
 
 
 struct uIntDivResult
@@ -1116,7 +1149,7 @@ struct uIntDivResult
 
 inline uInt operator / (const uInt &divident, const uInt &divisor)
 {
-    if (divisor.i_size == 0) 
+    if (divisor.size() == 0) 
       n_Int_helper::throw_division_by_zero_exception();
     if (divident < divisor) 
       return uInt();
@@ -1126,7 +1159,7 @@ inline uInt operator / (const uInt &divident, const uInt &divisor)
 }
 inline uInt operator % (const uInt &divident, const uInt &divisor)
 {
-    if (divisor.i_size == 0) 
+    if (divisor.size() == 0) 
       n_Int_helper::throw_division_by_zero_exception();
     if (divident < divisor) 
       return divident;
@@ -1136,7 +1169,7 @@ inline uInt operator % (const uInt &divident, const uInt &divisor)
 }
 inline uIntDivResult div(const uInt &divident, const uInt &divisor)
 {
-    if (divisor.i_size == 0) 
+    if (divisor.size() == 0) 
       n_Int_helper::throw_division_by_zero_exception();
     if (divident < divisor) 
       return uIntDivResult{uInt(), divident};
@@ -1146,18 +1179,18 @@ inline uIntDivResult div(const uInt &divident, const uInt &divisor)
           uInt::small_modulo(divident, uInt::down_cast(divisor))};
 
     /*else*/ /*school-book algorithm*/
-    uInt::size_type quotient_max_size = divident.i_size - divisor.i_size + 1;
+    uInt::size_type quotient_max_size = divident.size() - divisor.size() + 1;
     uIntDivResult res = {uInt{quotient_max_size, quotient_max_size},
-                      uInt{divisor.i_size + 1, divisor.i_size - 1}};
-    uInt cur_divident(divisor.i_size + 1, 0);
+                      uInt{divisor.size() + 1, divisor.size() - 1}};
+    uInt cur_divident(divisor.size() + 1, 0);
     /// copy <divisor.digitcount - 1> divident's most significant digits to cur remainder
-    std::copy_n(divident.i_data.cbegin() + quotient_max_size, 
-                divisor.i_size - 1, res.rem.i_data.begin());
+    std::copy_n(divident.cbegin() + quotient_max_size, 
+                divisor.size() - 1, res.rem.begin());
 
     for(uInt::size_type i = quotient_max_size; i-- > 0;) {
       uInt::copy_and_shift(cur_divident, res.rem);
-      cur_divident.i_data[0] = divident.i_data[i];
-      res.quo.i_data[i] = 
+      cur_divident[0] = divident[i];
+      res.quo[i] = 
           uInt::small_div(cur_divident, divisor, &res.rem);
     }
     res.quo.trim_zero();
@@ -1189,6 +1222,14 @@ auto operator << (ostr &os, const uInt &x)
     return os << to_string(x);
 }
 
+template<char ...cs>
+const uInt& operator "" _lll()
+{
+    static constexpr char str[]{cs..., '\0'};
+    static const uInt x = convert<uInt>(str);
+    return x;
+}
+
 
 
 struct IntDivResult;
@@ -1204,7 +1245,7 @@ class Int
     {
         *this = val;
     }
-    
+
     Int(uInt uns) : Int{positive, std::move(uns)} {}
 
     Int(Int&&) noexcept = default;
@@ -1236,14 +1277,6 @@ class Int
     }
 
 
-    using sign_type = int;
-    static constexpr sign_type zero = 0;
-    static constexpr sign_type positive = 1;
-    static constexpr sign_type negative = -positive;
-
-    ReadOnlyProperty<sign_type, Int> sign;
-
-
     template<typename intg, n_Int_helper::isIntegral_t<intg> = nullptr>
     explicit operator intg() const noexcept
     {
@@ -1255,26 +1288,31 @@ class Int
         return this->sign;
     }
 
+    using sign_type = int;
+    static constexpr sign_type zero = 0;
+    static constexpr sign_type positive = 1;
+    static constexpr sign_type negative = -positive;
+    ReadOnlyProperty<sign_type, Int> sign;
 
-    void parse(string_view str) &
+
+    Int& parse(string_view strv) &
     {
-        this->parse(str.data(), str.size());
-    }
-    void parse(const char *str) &
-    {
-        this->parse(str, strlen(str));
-    }
-    void parse(const char *str, size_t len) &
-    {
+        const char *str = strv.data();
+        auto len = strv.size();
         sign_type new_sign = positive;
         const char* en = str + len;
         if (*str == '-') {
           new_sign = -new_sign;
           ++str;
         }
-        this->i_abs.parse(str, en - str);
+        this->i_abs.parse({str, en});
         if (!this->i_abs) this->sign = zero;
         else this->sign = new_sign;
+        return *this;
+    }
+    Int&& parse(string_view strv) &&
+    {
+        return std::move(this->parse(strv));
     }
 
     friend std::string to_string(const Int &x)
@@ -1283,10 +1321,9 @@ class Int
         return to_string(x.i_abs);
     }
 
-
     friend bool operator == (const Int &lhs, const Int &rhs)
     {
-        return lhs.sign == rhs.sign && lhs.i_abs == rhs.i_abs;
+        return lhs.sign() == rhs.sign() && lhs.i_abs == rhs.i_abs;
     }
     friend bool operator != (const Int &lhs, const Int &rhs)
     {
@@ -1295,7 +1332,7 @@ class Int
     friend bool operator < (const Int &lhs, const Int &rhs)
     {
         if (&lhs == &rhs) return false;
-        if (lhs.sign != rhs.sign) return lhs.sign < rhs.sign;
+        if (lhs.sign() != rhs.sign()) return lhs.sign() < rhs.sign();
         if (lhs.sign == positive) return lhs.i_abs < rhs.i_abs;
         if (lhs.sign == negative) return rhs.i_abs < lhs.i_abs;
         return false;
@@ -1365,23 +1402,23 @@ class Int
 
     friend Int operator + (const Int &lhs, const Int &rhs)
     {
-        if(lhs.sign * rhs.sign != negative)
-          return Int{(lhs.sign ? lhs.sign : rhs.sign), 
+        if(lhs.sign() * rhs.sign() != negative)
+          return Int{(lhs.sign() ? lhs.sign() : rhs.sign()), 
                       lhs.i_abs + rhs.i_abs};
         if (lhs.i_abs < rhs.i_abs)
-          return Int{rhs.sign, rhs.i_abs - lhs.i_abs}; 
+          return Int{rhs.sign(), rhs.i_abs - lhs.i_abs}; 
         else
-          return Int{lhs.sign, lhs.i_abs - rhs.i_abs};
+          return Int{lhs.sign(), lhs.i_abs - rhs.i_abs};
     }
     friend Int operator + (const Int &lhs, Int &&rhs)
     {
-        if(lhs.sign * rhs.sign != negative)
-          return Int{(lhs.sign ? lhs.sign : rhs.sign), 
+        if(lhs.sign() * rhs.sign() != negative)
+          return Int{(lhs.sign() ? lhs.sign() : rhs.sign()), 
                       lhs.i_abs + std::move(rhs.i_abs)};
         if (lhs.i_abs < rhs.i_abs)
-          return Int{rhs.sign, std::move(rhs.i_abs) - lhs.i_abs}; 
+          return Int{rhs.sign(), std::move(rhs.i_abs) - lhs.i_abs}; 
         else
-          return Int{lhs.sign, lhs.i_abs - std::move(rhs.i_abs)};
+          return Int{lhs.sign(), lhs.i_abs - std::move(rhs.i_abs)};
     }
     friend Int operator + (Int &&lhs, const Int &rhs)
     {
@@ -1389,24 +1426,24 @@ class Int
     }
     friend Int operator + (Int &&lhs, Int &&rhs)
     {
-        if(lhs.sign * rhs.sign != negative)
-          return Int{(lhs.sign ? lhs.sign : rhs.sign), 
+        if(lhs.sign() * rhs.sign() != negative)
+          return Int{(lhs.sign() ? lhs.sign() : rhs.sign()), 
                       std::move(lhs.i_abs) + std::move(rhs.i_abs)};
         if (lhs.i_abs < rhs.i_abs)
-          return Int{rhs.sign, std::move(rhs.i_abs) - std::move(lhs.i_abs)}; 
+          return Int{rhs.sign(), std::move(rhs.i_abs) - std::move(lhs.i_abs)}; 
         else
-          return Int{lhs.sign, std::move(lhs.i_abs) - std::move(rhs.i_abs)};
+          return Int{lhs.sign(), std::move(lhs.i_abs) - std::move(rhs.i_abs)};
     }
 
     friend Int operator - (const Int &lhs, const Int &rhs)
     {
-        if(lhs.sign * -rhs.sign != negative)
-          return Int{(lhs.sign ? +lhs.sign : -rhs.sign), 
+        if(lhs.sign() * -rhs.sign() != negative)
+          return Int{(lhs.sign() ? +lhs.sign() : -rhs.sign()), 
                       lhs.i_abs + rhs.i_abs};
         if (lhs.i_abs < rhs.i_abs)
-          return Int{-rhs.sign, rhs.i_abs - lhs.i_abs}; 
+          return Int{-rhs.sign(), rhs.i_abs - lhs.i_abs}; 
         else
-          return Int{+lhs.sign, lhs.i_abs - rhs.i_abs};
+          return Int{+lhs.sign(), lhs.i_abs - rhs.i_abs};
     }
     friend Int operator - (const Int &lhs, Int &&rhs)
     {
@@ -1423,15 +1460,15 @@ class Int
 
     friend Int operator * (const Int &lhs, const Int &rhs)
     {
-        return Int{lhs.sign * rhs.sign, lhs.i_abs * rhs.i_abs};
+        return Int{lhs.sign() * rhs.sign(), lhs.i_abs * rhs.i_abs};
     }
     friend Int operator / (const Int &lhs, const Int &rhs)
     {
-        return Int{lhs.sign * rhs.sign, lhs.i_abs / rhs.i_abs};
+        return Int{lhs.sign() * rhs.sign(), lhs.i_abs / rhs.i_abs};
     }
     friend Int operator % (const Int &lhs, const Int &rhs)
     {
-        return Int{lhs.sign * rhs.sign, lhs.i_abs % rhs.i_abs};
+        return Int{lhs.sign() * rhs.sign(), lhs.i_abs % rhs.i_abs};
     }
     friend IntDivResult div(const Int&, const Int&);
 
@@ -1450,7 +1487,7 @@ class Int
 
     void negate() &
     {
-        this->sign.value = -this->sign.value;
+        this->sign = -this->sign();
     }
 
 
@@ -1476,8 +1513,8 @@ struct IntDivResult
 IntDivResult div(const Int &lhs, const Int &rhs)
 {
     auto res = div(lhs.i_abs, rhs.i_abs);
-    return {Int{lhs.sign * rhs.sign, std::move(res.quo)},
-            Int{lhs.sign * rhs.sign, std::move(res.rem)}};
+    return {Int{lhs.sign() * rhs.sign(), std::move(res.quo)},
+            Int{lhs.sign() * rhs.sign(), std::move(res.rem)}};
 }
 
 
