@@ -20,6 +20,14 @@
 //     std::cout <<a.active_member()<<' '<<to_string(a)<<'\n'
 //               <<b.active_member()<<' '<<to_string(b)<<'\n';
 
+// output :
+
+// first 5
+// second 3.162278
+// second 3.162278
+// second 1.200000
+
+
 
 #include <utility>
 #include <type_traits>
@@ -31,42 +39,42 @@ namespace Achibulup
 {
 namespace n_helper
 {
-constexpr int max_int(int a, int b) noexcept
+constexpr size_t max_int(size_t a, size_t b) noexcept
 {
     return a > b ? a : b;
 }
 template<typename ...types>
-constexpr typename std::enable_if<sizeof...(types) == 0, int>::type 
+constexpr typename std::enable_if<sizeof...(types) == 0, size_t>::type 
 max_size() noexcept
 {
     return 1;
 }
 template<typename Only, typename ...types>
-constexpr typename std::enable_if<sizeof...(types) == 0, int>::type 
+constexpr typename std::enable_if<sizeof...(types) == 0, size_t>::type 
 max_size() noexcept
 {
     return sizeof(Only);
 }
 template<typename First, typename Second, typename ...Others>
-constexpr int max_size() noexcept
+constexpr size_t max_size() noexcept
 {
     return max_int(max_int(sizeof(First), sizeof(Second)), max_size<Others...>());
 }
 
 template<typename ...types>
-constexpr typename std::enable_if<sizeof...(types) == 0, int>::type 
+constexpr typename std::enable_if<sizeof...(types) == 0, size_t>::type 
 max_align() noexcept
 {
     return 1;
 }
 template<typename Only, typename ...types>
-constexpr typename std::enable_if<sizeof...(types) == 0, int>::type 
+constexpr typename std::enable_if<sizeof...(types) == 0, size_t>::type 
 max_align() noexcept
 {
     return alignof(Only);
 }
 template<typename First, typename Second, typename ...Others>
-constexpr int max_align() noexcept
+constexpr size_t max_align() noexcept
 {
     return max_int(max_int(alignof(First), alignof(Second)), max_align<Others...>());
 }
@@ -262,43 +270,64 @@ constexpr bool are_assignable(
               || std::is_move_assignable<Types>::value)...);
 }
 
-} // n_helper
+
+template<typename ...Types, typename ...Names>
+constexpr bool are_nothrow_copy_constructible(
+  SafeUnionParam<std::pair<Types, Names>...>) noexcept
+{
+    return ands(std::is_nothrow_copy_constructible<Types>::value...);
+}
+template<typename ...Types, typename ...Names>
+constexpr bool are_nothrow_move_constructible(
+  SafeUnionParam<std::pair<Types, Names>...>) noexcept
+{
+    return ands(std::is_nothrow_move_constructible<Types>::value...);
+}
+template<typename ...Types, typename ...Names>
+constexpr bool are_nothrow_copy_assignable(
+  SafeUnionParam<std::pair<Types, Names>...>) noexcept
+{
+    return ands(std::is_nothrow_copy_assignable<Types>::value...);
+}
+template<typename ...Types, typename ...Names>
+constexpr bool are_nothrow_move_assignable(
+  SafeUnionParam<std::pair<Types, Names>...>) noexcept
+{
+    return ands(std::is_nothrow_move_assignable<Types>::value...);
+}
 
 
-template<typename...>
-struct SafeUnion;
+
+
 template<typename>
 struct SafeUnion_data_base;
 
 template<typename Params, 
          typename = std::integral_constant<
-                      bool, 
-                      n_helper::are_trivially_destructible(Params())
+                      bool, are_trivially_destructible(Params{})
                     >
         >
 struct SafeUnion_traits0;
 
 template<typename Params, 
          typename = std::integral_constant<
-                      bool, 
-                      n_helper::are_trivially_copyable(Params())
+                      bool, are_trivially_copyable(Params{})
                     >
         >
 struct SafeUnion_traits1;
 
 
 template<typename ...Types, typename ...Names>
-struct SafeUnion_data_base<
-         n_helper::SafeUnionParam<std::pair<Types, Names>...>> 
+struct SafeUnion_data_base<SafeUnionParam<std::pair<Types, Names>...>> 
 {
-    using Params = n_helper::SafeUnionParam<std::pair<Types, Names>...>;
+    using Params = SafeUnionParam<std::pair<Types, Names>...>;
 
     template<typename Name>
-    using lookup = n_helper::Union_find_t<Name, Params>;
+    using lookup = Union_find_t<Name, Params>;
     
-    using manager_t = const n_helper::UnionMemberManagerStructure*;
+    using manager_t = const UnionMemberManagerStructure*;
     template<typename Name>
-    using MemberManager = n_helper::UnionMemberManager<lookup<Name>, Name>;
+    using MemberManager = UnionMemberManager<lookup<Name>, Name>;
 
     SafeUnion_data_base() noexcept : current() {}
 
@@ -308,43 +337,43 @@ struct SafeUnion_data_base<
     }
 
     template<typename Name>
-    void reset_current()
+    void reset_current() noexcept
     {
         this->current = &MemberManager<Name>::instance;
     }
 
-    void reset_current()
+    void reset_current() noexcept
     {
         this->current = {};
     }
 
-    alignas(n_helper::max_align<Types...>()) 
-    byte storage[n_helper::max_size<Types...>()];
+    alignas(max_align<Types...>()) 
+    byte storage[max_size<Types...>()];
     manager_t current;
 };
 
 template<typename ...Types, typename ...Names>
 struct SafeUnion_traits0<
-         n_helper::SafeUnionParam<std::pair<Types, Names>...>, 
-         std::true_type>
-: SafeUnion_data_base<
-    n_helper::SafeUnionParam<std::pair<Types, Names>...>>
+         SafeUnionParam<std::pair<Types, Names>...>, 
+         std::true_type
+       >
+: SafeUnion_data_base<SafeUnionParam<std::pair<Types, Names>...>>
 {
-    void destruct() {}
+    void destruct() noexcept {}
 };
 
 template<typename ...Types, typename ...Names>
 struct SafeUnion_traits0<
-         n_helper::SafeUnionParam<std::pair<Types, Names>...>, 
-         std::false_type>
-: SafeUnion_data_base<
-    n_helper::SafeUnionParam<std::pair<Types, Names>...>>
+         SafeUnionParam<std::pair<Types, Names>...>, 
+         std::false_type
+       >
+: SafeUnion_data_base<SafeUnionParam<std::pair<Types, Names>...>>
 {
     ~SafeUnion_traits0()
     {
         this->destruct();
     }
-    void destruct() 
+    void destruct() noexcept
     {
         this->current->manager->dtor(this->storage);
     }
@@ -352,12 +381,12 @@ struct SafeUnion_traits0<
 
 template<typename ...Types, typename ...Names>
 struct SafeUnion_traits1<
-         n_helper::SafeUnionParam<std::pair<Types, Names>...>, 
-         std::true_type>
-: SafeUnion_traits0<
-    n_helper::SafeUnionParam<std::pair<Types, Names>...>>
+         SafeUnionParam<std::pair<Types, Names>...>, 
+         std::true_type
+       >
+: SafeUnion_traits0<SafeUnionParam<std::pair<Types, Names>...>>
 {
-    void reset()
+    void reset() noexcept
     {
         this->reset_current();
     }
@@ -365,48 +394,52 @@ struct SafeUnion_traits1<
 
 template<typename ...Types, typename ...Names>
 struct SafeUnion_traits1<
-         n_helper::SafeUnionParam<std::pair<Types, Names>...>, 
-         std::false_type>
-: SafeUnion_traits0<
-    n_helper::SafeUnionParam<std::pair<Types, Names>...>>
+         SafeUnionParam<std::pair<Types, Names>...>, 
+         std::false_type
+       >
+: SafeUnion_traits0<SafeUnionParam<std::pair<Types, Names>...>>
 {
-    using Params = n_helper::SafeUnionParam<std::pair<Types, Names>...>;
+    using Params = SafeUnionParam<std::pair<Types, Names>...>;
 
     SafeUnion_traits1() noexcept = default;
 
     SafeUnion_traits1(const SafeUnion_traits1 &other)
+    noexcept(are_nothrow_copy_constructible(Params{}))
     : SafeUnion_traits1()
     {
-        static_assert(n_helper::are_copy_constructible(Params()),
+        static_assert(are_copy_constructible(Params{}),
                       "all union member must be copy constructible");
         this->copy_assign(other);
     }
     SafeUnion_traits1(SafeUnion_traits1 &&other)
+    noexcept(are_nothrow_move_constructible(Params{}))
     : SafeUnion_traits1()
     {
-        static_assert(n_helper::are_move_constructible(Params()),
+        static_assert(are_move_constructible(Params{}),
                       "all union member must be move constructible");
         this->move_assign(other);
     }
 
     SafeUnion_traits1& operator = (const SafeUnion_traits1 &other) &
+    noexcept(are_nothrow_copy_assignable(Params{}))
     {
-        static_assert(n_helper::are_copy_assignable(Params()),
+        static_assert(are_copy_assignable(Params{}),
                       "all union member must be copy assignable");
         this->reset();
         this->copy_assign(other);
         return *this;
     }
     SafeUnion_traits1& operator = (SafeUnion_traits1 &&other) &
+    noexcept(are_nothrow_move_assignable(Params{}))
     {
-        static_assert(n_helper::are_move_assignable(Params()),
+        static_assert(are_move_assignable(Params{}),
                       "all union member must be move assignable");
         this->reset();
         this->move_assign(other);
         return *this;
     }
 
-    void reset()
+    void reset() noexcept
     {
         if (!this->empty()) {
           this->destruct();
@@ -429,13 +462,20 @@ struct SafeUnion_traits1<
 };
 
 
+} // n_helper
+
+
+template<typename...>
+struct SafeUnion;
+
 template<typename ...Types, typename ...Names>
 class SafeUnion<std::pair<Types, Names>...> 
-: private SafeUnion_traits1<
-    n_helper::SafeUnionParam<std::pair<Types, Names>...>>
+: private n_helper::SafeUnion_traits1<
+            n_helper::SafeUnionParam<std::pair<Types, Names>...>
+          >
 {
-    using direct_base = SafeUnion_traits1<
-                          n_helper::SafeUnionParam<std::pair<Types, Names>...>>;
+    using Params = n_helper::SafeUnionParam<std::pair<Types, Names>...>;
+    using direct_base = n_helper::SafeUnion_traits1<Params>;
 
   public:
     template<typename Name>
@@ -443,13 +483,20 @@ class SafeUnion<std::pair<Types, Names>...>
 
     SafeUnion() noexcept = default;
 
-    template<typename Name, typename ...Args>
-    SafeUnion(Name, Args&& ...args) : SafeUnion()
+    template<typename Name, typename ...Args,
+             typename Type = lookup<Name>>
+    SafeUnion(Name, Args&& ...args) 
+    noexcept(noexcept(Type(std::forward<Args>(args)...)))
+    : SafeUnion()
     {
         this->emplace<Name>(std::forward<Args>(args)...);
     }
+
+    /// to deal with the case that a brace initializer is passed in
     template<typename Name>
-    SafeUnion(Name, lookup<Name> &&val) : SafeUnion()
+    SafeUnion(Name, lookup<Name> &&val) 
+    noexcept(std::is_nothrow_move_constructible<lookup<Name>>::value)
+    : SafeUnion()
     {   
         using Type = lookup<Name>;
         this->emplace<Name>(std::forward<Type>(val));
@@ -458,16 +505,17 @@ class SafeUnion<std::pair<Types, Names>...>
     SafeUnion(const SafeUnion&) = default;
     SafeUnion(SafeUnion &&) = default;
     
-    SafeUnion& operator= (const SafeUnion &) & = default;
-    SafeUnion& operator= (SafeUnion &&) & = default;
+    SafeUnion& operator = (const SafeUnion &) & = default;
+    SafeUnion& operator = (SafeUnion &&) & = default;
 
-    friend void swap(SafeUnion &a, SafeUnion &b)
+    friend void swap(SafeUnion &a, SafeUnion &b) 
+    noexcept(noexcept(std::swap(a, b)))
     {
         std::swap(a, b);
     }
 
 
-    static constexpr int member_count() noexcept
+    static constexpr size_t member_count() noexcept
     {
         return sizeof...(Types);
     }
@@ -491,25 +539,27 @@ class SafeUnion<std::pair<Types, Names>...>
     template<typename Name, typename ...Args, 
              typename Type = lookup<Name>>
     Type& activate(Name, Args&& ...args) &
+    noexcept(noexcept(Type(std::forward<Args>(args)...)))
     {
-        static_assert(n_helper::are_assignable(typename direct_base::Params()),
+        static_assert(n_helper::are_assignable(Params{}),
                       "all members must be assignable");
         this->emplace<Name>(std::forward<Args>(args)...);
         return this->get(Name());
     }
     template<typename Name, typename Type = lookup<Name>>
     Type& activate(Name, lookup<Name> &&val) &
+    noexcept(std::is_nothrow_move_constructible<lookup<Name>>::value)
     {
-        static_assert(n_helper::are_assignable(typename direct_base::Params()),
+        static_assert(n_helper::are_assignable(Params{}),
                       "all members must be assignable");
         this->emplace<Name>(std::forward<Type>(val));
         return this->get(Name());
     }
 
 
-    SafeUnion& reset() &
+    SafeUnion& reset() & noexcept
     {
-        static_assert(n_helper::are_assignable(typename direct_base::Params()),
+        static_assert(n_helper::are_assignable(Params{}),
                       "all members must be assignable");
         direct_base::reset();
         return *this;
@@ -557,21 +607,8 @@ class SafeUnion<std::pair<Types, Names>...>
         using Type = lookup<Name>;
         this->reset();
         constructor<Type>::construct(reinterpret_cast<Type*>(this->storage),
-                                                  std::forward<Args>(args)...);
+                                     std::forward<Args>(args)...);
         this->template reset_current<Name>();
-    }
-
-    void copy_to(SafeUnion &dest) const
-    {
-        if (!this->empty())
-          this->current->manager->copy_ctor(dest.storage, this->storage);
-        dest.current = this->current;
-    }
-    void move_to(SafeUnion &dest)
-    {
-        if (!this->empty())
-          this->current->manager->move_ctor(dest.storage, this->storage);
-        dest.current = this->current;
     }
 
     using direct_base::destruct;
