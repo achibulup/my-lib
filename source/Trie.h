@@ -10,13 +10,13 @@
 namespace Achibulup
 {
 
-    template<char lbound = 0, char ubound = 127>
+    template<char lbound = 32, char ubound = 127>
     class Trie
     {
-        using id_type = size_t;
+        using id_type = std::int32_t;
 
       public:
-        using size_type = size_t;
+        using size_type = std::int32_t;
         static const char char_lower_bound = lbound;
         static const char char_upper_bound = ubound;
         static const size_type char_range = ubound - lbound + 1;
@@ -595,7 +595,7 @@ namespace Achibulup
 
 
 /*
-    template<typename char_t, char_t lbound = 0, char_t ubound = (~static_cast<char_t>(0)) ^ (1 << (sizeof(char_t) * CHAR_BIT - 1))>
+    template<typename char_t, char_t lbound = 32, char_t ubound = 127>
     class Trie_beta
     {
 

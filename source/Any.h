@@ -55,8 +55,7 @@ bool EqualComparator(RelaxedPtr<const void> l, RelaxedPtr<const void> r)
 template<typename Tp>
 void Destructor(RelaxedPtr<void> ptr) noexcept
 {
-    using type = Tp;
-    static_cast<type*>(ptr)->~type();
+    Achibulup::destructor<Tp>::destroy(static_cast<Tp*>(ptr));
 }
 
 

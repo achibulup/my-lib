@@ -40,8 +40,9 @@ namespace n_Vla_common
     }
     inline void throw_Vla_out_of_range(size_type idx, size_type sz)
     {
-        throw std::out_of_range(std::string("Vla indexing out of range : i (which is ") + std::to_string(idx)
-                    + "), is not in range [0, size()) (which is [0, " + std::to_string(sz) + "))");
+        throw std::out_of_range(string_format(
+            "Vla indexing out of range : i (which is ",idx,"), "
+            "is not in range [0, size()) (which is [0, ",sz,"))"));
     };
 }
 

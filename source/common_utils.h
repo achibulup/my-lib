@@ -106,7 +106,7 @@ ostr& operator << (ostr &os, string_view s)
       os << c;
     return os;
 }
-using wstr_arg = const std::wstring&;
+using wstring_view = const std::wstring&;
 #endif
 
 template<typename Tp>
@@ -221,13 +221,22 @@ std::string to_string(Tp &&x)
 {
     return std::forward<Tp>(x);
 }
-
+template<typename Tp>
+void insert_helper(std::ostringstream &ostr, const Tp &val, std::true_type)
+{
+    ostr << string_view(val);
+}
+template<typename Tp>
+void insert_helper(std::ostringstream &ostr, const Tp &val, std::false_type)
+{
+    ostr << val;
+}
 void string_format_helper(std::ostringstream& result) {}
 template<typename Tp, typename ...Args>
 void string_format_helper(std::ostringstream& result, 
                           const Tp &first, const Args& ...args)
 {
-    result << first;
+    insert_helper(result, first, std::is_convertible<const Tp&, string_view>());
     string_format_helper(result, args...);
 }
 template<typename ...Args>

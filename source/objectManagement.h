@@ -450,16 +450,22 @@ inline void delete_buffer(RelaxedPtr<Tp> ptr)
 template<typename Tp, bool = std::is_trivially_destructible<Tp>::value>
 struct destructor
 {
-    static void destroy(RelaxedPtr<Tp>, size_t = 1) {}
+    static void destroy(RelaxedPtr<Tp>) {}
+    static void destroy(RelaxedPtr<Tp>, size_t) {}
 };
 template<typename Tp>
 struct destructor<Tp, false>
 {
-    static void destroy(RelaxedPtr<Tp> pos, size_t num = 1)
+    static void destroy(RelaxedPtr<Tp> pos)
     {
+        destroy(pos, 1);
+    }
+    static void destroy(RelaxedPtr<Tp> pos, size_t num)
+    {
+        using Type = Tp;
         pos += num;
         for(size_t i = 0; i < num; ++i)
-          delete --pos;
+          (--pos)->~Type();
     }
 };
 
