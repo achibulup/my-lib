@@ -1,5 +1,26 @@
 #ifndef SAFEUNION_H_INCLUDED
 #define SAFEUNION_H_INCLUDED
+
+// featuring type-safe union with named members
+
+// usage example :
+
+// #define NAMEOF(...) ACHIBULUP__NAMEOF(__VA_ARGS__)
+// #define NAMEOF_T(...) ACHIBULUP__NAMEOF_T(__VA_ARGS__)
+//     using Union = SafeUnion<
+//       std::pair<int, NAMEOF_T(first)>,
+//       std::pair<double, NAMEOF_T(second)>
+//     >;
+//     Union a(NAMEOF(first), 5), b(NAMEOF(second), 6);
+//     b.get(NAMEOF(second)) = std::sqrt(10);
+//     std::cout <<a.active_member()<<' '<<to_string(a)<<'\n'
+//               <<b.active_member()<<' '<<to_string(b)<<'\n';
+//     swap(a, b);
+//     b.activate(NAMEOF(second), 1.2);
+//     std::cout <<a.active_member()<<' '<<to_string(a)<<'\n'
+//               <<b.active_member()<<' '<<to_string(b)<<'\n';
+
+
 #include <utility>
 #include <type_traits>
 #include "common_utils.h"
