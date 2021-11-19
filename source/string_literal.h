@@ -1,11 +1,20 @@
+/// some helpful constant string stuffs
+
+/// - string_constant<char...> : a conbination of std::integral_constant and std::intrgral_sequence
+/// the static variable value is a constexpr const char[] correspond to string literal of cs
+/// it also has conversion op and function call op that return the string
+
+/// ACHIBULUP__NAMEOF(x) : return a string_constant correspond to "x"
+/// ACHIBULUP__NAMEOF_T(x) : type of the object returned
+
+/// (normally you would like to create a macro for it like #define NAMEOF(x) ACHIBULUP__NAMEOF(x))
+
+
 #ifndef STRING_LITERAL_H_INCLUDED
 #define STRING_LITERAL_H_INCLUDED
-#include <cstdint>
+#include "common_utils.h"
 namespace Achibulup
 {
-#ifndef COMMON_UTILS_H_INCLUDED
-using size_t = std::ptrdiff_t;
-#endif
 
 template<char ...cs>
 constexpr const char string_literal[] = {cs..., '\0'};
