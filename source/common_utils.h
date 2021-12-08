@@ -19,6 +19,7 @@
 #include <utility>
 #include <sstream>
 #include <iterator>
+#include <iostream>
 #include <type_traits>
 #if ACHIBULUP__Cpp17_later
 #include <charconv>
@@ -36,78 +37,7 @@ namespace Achibulup{
 
 using size_t = std::ptrdiff_t;
 
-#if ACHIBULUP__Cpp17_later
-using std::string_view;
-using std::wstring_view;
-#else
-class string_view
-{
-    public:
-    using size_type = size_t;
-    using const_iterator = const char*;
-    using iterator = const_iterator;
 
-
-    constexpr string_view() noexcept : i_ptr(), i_len() {}
-    constexpr string_view(const char *p, size_t ln) noexcept
-    : i_ptr(p), i_len(ln) {}
-    constexpr string_view(const char *b, const char *e) noexcept
-    : i_ptr(b), i_len(e - b) {}
-    template<size_t Nm>
-    constexpr string_view(const char (&str)[Nm]) noexcept
-    : i_ptr(str), i_len(Nm - 1) {}
-    string_view(const std::string &str) 
-    : i_ptr(str.c_str()), i_len(str.size()) {}
-
-    constexpr char operator [] (size_type i) const noexcept
-    {
-        return this->i_ptr[i];
-    }
-    constexpr size_type size() const noexcept
-    {
-        return this->i_len;
-    }
-
-    constexpr const_iterator cbegin() const noexcept
-    {
-        return i_ptr;
-    }
-    constexpr iterator begin() const noexcept
-    {
-        return cbegin();
-    }
-    constexpr const_iterator cend() const noexcept
-    {
-        return i_ptr + i_len;
-    }
-    constexpr iterator end() const noexcept
-    {
-        return cend();
-    }
-
-    constexpr const char* data() const noexcept
-    {
-        return i_ptr;
-    }
-
-    operator std::string () const
-    {
-        return std::string(cbegin(), cend());
-    }
-
-    private:
-    const_iterator i_ptr;
-    size_type i_len;
-};
-template <typename ostr>
-ostr& operator << (ostr &os, string_view s)
-{
-    for(char c : s)
-      os << c;
-    return os;
-}
-using wstring_view = const std::wstring&;
-#endif
 
 template<typename Tp>
 inline constexpr size_t ssizeof() noexcept
@@ -129,8 +59,11 @@ struct Typeof_helper
 template<typename Tp>
 using Typeof = typename Typeof_helper<Tp>::type;
 
-template<bool constraint>
-using EnableIf_t = typename std::enable_if<constraint>::type;
+template<bool constraint, typename Tp = void>
+using EnableIf_t = typename std::enable_if<constraint, Tp>::type;
+
+template<typename Tp>
+using ReferenceFilter = EnableIf_t<std::is_reference<Tp>::value, Tp>;
 
 template<typename From, typename To>
 using cast_t = To;
@@ -213,6 +146,82 @@ inline ACHIBULUP__constexpr_fun14 void Move_assign(Tp &var, Tp &val)
 
 
 /// string utilities
+
+
+#if ACHIBULUP__Cpp17_later
+using std::string_view;
+using std::wstring_view;
+#else
+class string_view
+{
+    public:
+    using size_type = size_t;
+    using const_iterator = const char*;
+    using iterator = const_iterator;
+
+
+    constexpr string_view() noexcept : i_ptr(), i_len() {}
+    constexpr string_view(const char *p, size_t ln) noexcept
+    : i_ptr(p), i_len(ln) {}
+    constexpr string_view(const char *b, const char *e) noexcept
+    : i_ptr(b), i_len(e - b) {}
+    template<size_t Nm>
+    constexpr string_view(const char (&str)[Nm]) noexcept
+    : i_ptr(str), i_len(Nm - 1) {}
+    string_view(const std::string &str) 
+    : i_ptr(str.c_str()), i_len(str.size()) {}
+
+    constexpr char operator [] (size_type i) const noexcept
+    {
+        return this->i_ptr[i];
+    }
+    constexpr size_type size() const noexcept
+    {
+        return this->i_len;
+    }
+
+    constexpr const_iterator cbegin() const noexcept
+    {
+        return i_ptr;
+    }
+    constexpr iterator begin() const noexcept
+    {
+        return cbegin();
+    }
+    constexpr const_iterator cend() const noexcept
+    {
+        return i_ptr + i_len;
+    }
+    constexpr iterator end() const noexcept
+    {
+        return cend();
+    }
+
+    constexpr const char* data() const noexcept
+    {
+        return i_ptr;
+    }
+
+    operator std::string () const
+    {
+        return std::string(cbegin(), cend());
+    }
+
+    private:
+    const_iterator i_ptr;
+    size_type i_len;
+};
+template <typename t1, typename t2>
+std::basic_ostream<t1, t2>& 
+operator << (std::basic_ostream<t1, t2> &os, string_view s)
+{
+    for(char c : s)
+      os << c;
+    return os;
+}
+using wstring_view = const std::wstring&;
+#endif
+
 
 using std::to_string;
 template<typename Tp, 

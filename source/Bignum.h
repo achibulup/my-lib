@@ -971,7 +971,7 @@ class uInt
                         lhs.size(), res->begin() + dec.unit);
         }
         else {
-          (*res)[lhs.size() + dec.unit + 1] = 0;
+          (*res)[lhs.size() + dec.unit] = 0;
           for(size_type i = lhs.size(); i-- > 0;){
             (*res)[i + dec.unit + 1] |=
               lhs[i] >> (k_BaseBinDigit - dec.digit);
@@ -1205,19 +1205,19 @@ template<> uInt convert<uInt>(string_view str)
     return res;
 }
 
-template<typename istr>
-auto operator >> (istr &is, uInt &x) 
--> decltype(is >> std::declval<std::string&>())
+template<typename t1, typename t2>
+std::basic_istream<t1, t2>& 
+operator >> (std::basic_istream<t1, t2> &is, uInt &x) 
 {
     std::string input;
-    auto &&chain = is >> input;
+    is >> input;
     x.parse(input);
-    return std::forward<decltype(chain)>(chain);
+    return is;
 }
 
-template<typename ostr>
-auto operator << (ostr &os, const uInt &x)
--> decltype(os << to_string(x))
+template<typename t1, typename t2>
+std::basic_ostream<t1, t2>& 
+operator << (std::basic_ostream<t1, t2> &os, const uInt &x)
 {
     return os << to_string(x);
 }
@@ -1305,7 +1305,7 @@ class Int
           new_sign = -new_sign;
           ++str;
         }
-        this->i_abs.parse({str, en});
+        this->i_abs.parse(string_view(str, en - str));
         if (!this->i_abs) this->sign = zero;
         else this->sign = new_sign;
         return *this;
@@ -1526,19 +1526,19 @@ template<> Int convert<Int>(string_view str)
     return res;
 }
 
-template<typename istr>
-auto operator >> (istr &is, Int &x) 
--> decltype(is >> std::declval<std::string&>())
+template<typename t1, typename t2>
+std::basic_istream<t1, t2>& 
+operator >> (std::basic_istream<t1, t2> &is, Int &x) 
 {
     std::string input;
-    decltype(is >> input) chain = is >> input;
+    is >> input;
     x.parse(input);
-    return chain;
+    return is;
 }
 
-template<typename ostr>
-auto operator << (ostr &os, const Int &x) 
--> decltype(os << to_string(x))
+template<typename t1, typename t2>
+std::basic_ostream<t1, t2>& 
+operator << (std::basic_ostream<t1, t2> &os, const Int &x)
 {
     return os << to_string(x);
 }
