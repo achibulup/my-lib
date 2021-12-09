@@ -669,6 +669,7 @@ istr&& operator >> (istr &&is, Polynomial<Tp, var_name> &poly)
       if (sign != '+' && sign != '-') failure_return;
       is.get();
 
+      ignoreVoid(is);
       bool check_var = check_var_name(is, var_name, name_len);
       if (check_var) current_coef = lit1;
       else if (!(is >> current_coef)) failure_return;
