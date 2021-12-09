@@ -412,6 +412,14 @@ int main()
     // 1 (x + 1) 1
     // 1 1 (x + 1)
     // det m4
+    // set X 3 1
+    // 4
+    // -2
+    // 1
+    // bind b m2 X
+    // print b
+    // rechelon b
+    // print b
     // exit
     return 0;
 }
