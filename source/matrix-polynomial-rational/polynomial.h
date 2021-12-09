@@ -294,7 +294,9 @@ class Polynomial
     {
         trim_zero();
     }
-
+    template<typename Tp2, typename = typename std::enable_if<
+                            std::is_arithmetic<Tp2>::value>::type>
+    Polynomial(Tp2 val) : Polynomial(static_cast<Tp>(val)) {}
     Polynomial(Literal0) noexcept : Polynomial() {}
     Polynomial(Literal1) : Polynomial(Tp(lit1)) {}
 
