@@ -1,7 +1,10 @@
+#ifndef RATIONAL_H_INCLUDED
+#define RATIONAL_H_INCLUDED
+
 #include <numeric>
 #include "math_common.h"
 
-template<typename Tp = int>
+template<typename Tp>
 class Rational
 {
   public:
@@ -219,3 +222,5 @@ ostr&& operator << (ostr &&os, Rational<Tp> x)
     else os << parenthesized(x.getNum()) <<'/'<< parenthesized(x.getDenom());
     return std::forward<ostr>(os);
 }
+
+#endif //RATIONAL_H_INCLUDED

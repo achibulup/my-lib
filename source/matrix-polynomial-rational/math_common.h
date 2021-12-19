@@ -2,6 +2,8 @@
 #define MATH_COMMON_H_INCLUDED
 #include <sstream>
 #include <numeric>
+#include <type_traits>
+#include <limits>
 bool isAlpha(unsigned char c)
 {
     return std::isalpha(c);
@@ -28,6 +30,19 @@ istr& ignoreVoid(istr &is)
     }
     return is;
 }
+
+template<typename Tp>
+std::string parenthesized(Tp val)
+{
+    std::ostringstream osstr;
+    osstr << val;
+    std::string res = osstr.str();
+    if (res.find_first_of(" +-*/%") != res.npos) 
+      res = '(' + res + ')';
+    return res;
+}
+
+
 
 using Literal0 = decltype(nullptr);
 using Literal1 = std::integral_constant<int, 1>;
@@ -67,17 +82,16 @@ Tp abs(Tp val)
     return val < 0 ? -val : val;
 }
 
-
-template<typename Tp>
-std::string parenthesized(Tp val)
+template<typename Tp,
+         typename = typename std::enable_if<
+           std::is_arithmetic<Tp>::value>::type>
+bool approxEqual(Tp a, Tp b, 
+             Tp relative_epsilon = std::numeric_limits<Tp>::epsilon() * 3)
 {
-    std::ostringstream osstr;
-    osstr << val;
-    std::string res = osstr.str();
-    if (res.find_first_of(" /") != res.npos) 
-      res = '(' + res + ')';
-    return res;
+    using std::abs;
+    return abs(a - b) < relative_epsilon * std::max<Tp>(abs(a), 1);
 }
+
 
 
 

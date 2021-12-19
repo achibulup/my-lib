@@ -1,18 +1,80 @@
+#ifndef POLYNOMIAL_H_INCLUDED
+#define POLYNOMIAL_H_INCLUDED
+
+
 #include <vector>
 #include <type_traits>
 #include <string>
 #include <sstream>
 #include <cstring>
+#include <algorithm>
+#include <complex>
 #include "math_common.h"
 
 
 
-
 template<char ...cs>
-constexpr char string_literal[] = {cs..., 0};
+struct StringConstant
+{
+    using value_type = const char [sizeof...(cs) + 1];
+    static constexpr value_type value = {cs..., 0};
+    constexpr value_type& operator () () const noexcept
+    {
+        return value;
+    }
+    constexpr operator value_type& () const noexcept
+    {
+        return value;
+    }
+    template<int index>
+    static constexpr char get () noexcept
+    {
+        static_assert(0 <= index && index <= size(), "access out of bound");
+        return value[index];
+    }
+    static constexpr int size() noexcept
+    {
+        return sizeof...(cs);
+    }
+    static constexpr int length() noexcept
+    {
+        return sizeof...(cs);
+    }
+    constexpr char operator [] (int index) const noexcept
+    {
+        return value[index];
+    }
+    static constexpr char at(int index)
+    {
+        if (index < 0 || index > size()) 
+          throw std::exception();
+        return value[index];
+    }
+    static constexpr bool empty() noexcept
+    {
+        return size() == 0;
+    }
+    static constexpr const char* cbegin() noexcept
+    {
+        return value;
+    }
+    static constexpr const char* begin() noexcept
+    {
+        return cbegin();
+    }
+    static constexpr const char* cend() noexcept
+    {
+        return cbegin() + size();
+    }
+    static constexpr const char* end() noexcept
+    {
+        return cend();
+    }
+};
+template<char ...cs>
+constexpr char StringConstant<cs...>::value[sizeof...(cs) + 1];
 
-
-template<typename Tp, const char *var_name = string_literal<'x'>>
+template<typename Tp, typename var_name = StringConstant<'x'>>
 class PolynomialLiteral
 {
   public:
@@ -147,6 +209,19 @@ class PolynomialLiteral
         return res;
     }
 
+    template<typename Input>
+    decltype(Tp{} * Input{}) operator () (Input input) const
+    {
+        decltype(Tp{} * Input{}) res = (*this)[0];
+        if (degree() >= 1) res += (*this)[1] * input;
+        decltype(Tp{} * Input{}) exp = input;
+        for(int i = 2; i <= degree(); ++i) {
+          exp *= input;
+          res += (*this)[i] * exp;
+        }
+        return res;
+    }
+
   private:
     PolynomialLiteral() : coeficient(1) {}
 
@@ -159,7 +234,7 @@ class PolynomialLiteral
     std::vector<Tp> coeficient;
 };
 
-template<const char *var_name>
+template<typename var_name>
 PolynomialLiteral<long double, var_name>
 toFloat(PolynomialLiteral<long long, var_name> val)
 {
@@ -168,28 +243,28 @@ toFloat(PolynomialLiteral<long long, var_name> val)
       res.set(i, val[i]);
     return res;
 }
-template<const char *var_name>
+template<typename var_name>
 PolynomialLiteral<long double, var_name>
 operator + (PolynomialLiteral<long long, var_name> lhs, 
             PolynomialLiteral<long double, var_name> rhs)
 {
     return toFloat(std::move(lhs)) + std::move(rhs);
 }
-template<const char *var_name>
+template<typename var_name>
 PolynomialLiteral<long double, var_name>
 operator + (PolynomialLiteral<long double, var_name> &&lhs, 
             PolynomialLiteral<long long, var_name> &&rhs)
 {
     return std::move(rhs) + std::move(lhs);
 }
-template<const char *var_name>
+template<typename var_name>
 PolynomialLiteral<long double, var_name>
 operator - (PolynomialLiteral<long long, var_name> &&lhs, 
             PolynomialLiteral<long double, var_name> &&rhs)
 {
     return std::move(lhs) + -std::move(rhs);
 }
-template<const char *var_name>
+template<typename var_name>
 PolynomialLiteral<long double, var_name>
 operator - (PolynomialLiteral<long double, var_name> &&lhs, 
             PolynomialLiteral<long long, var_name> &&rhs)
@@ -197,14 +272,14 @@ operator - (PolynomialLiteral<long double, var_name> &&lhs,
     return std::move(lhs) + -std::move(rhs);
 }
 
-template<const char *var_name>
+template<typename var_name>
 PolynomialLiteral<long double, var_name>
 operator * (PolynomialLiteral<long long, var_name> lhs, 
             PolynomialLiteral<long double, var_name> rhs)
 {
     return toFloat(std::move(lhs)) * std::move(rhs);
 }
-template<const char *var_name>
+template<typename var_name>
 PolynomialLiteral<long double, var_name>
 operator * (PolynomialLiteral<long double, var_name> &&lhs, 
             PolynomialLiteral<long long, var_name> &&rhs)
@@ -212,7 +287,7 @@ operator * (PolynomialLiteral<long double, var_name> &&lhs,
     return std::move(rhs) * std::move(lhs);
 }
 
-template<const char *var_name, typename Tp, 
+template<typename var_name, typename Tp, 
          typename = typename std::enable_if<
                               std::is_floating_point<Tp>::value>::type>
 PolynomialLiteral<long double, var_name> 
@@ -220,7 +295,7 @@ operator * (Tp lhs, PolynomialLiteral<long long, var_name> rhs)
 {
     return (PolynomialLiteral<long double, var_name>(lhs)^0) * std::move(rhs);
 }
-template<const char *var_name, typename Tp, 
+template<typename var_name, typename Tp, 
          typename = typename std::enable_if<
                               std::is_floating_point<Tp>::value>::type>
 PolynomialLiteral<long double, var_name>
@@ -228,7 +303,7 @@ operator * (PolynomialLiteral<long long, var_name> lhs, Tp rhs)
 {
     return rhs * std::move(lhs);
 }
-template<const char *var_name, typename Tp, 
+template<typename var_name, typename Tp, 
          typename = typename std::enable_if<
                               std::is_floating_point<Tp>::value>::type>
 PolynomialLiteral<long double, var_name>
@@ -240,35 +315,35 @@ operator / (PolynomialLiteral<long long, var_name> lhs, Tp rhs)
     return res;
 }
 
-PolynomialLiteral<long long, string_literal<'x'>> 
+PolynomialLiteral<long long, StringConstant<'x'>> 
 operator "" _x(unsigned long long coef)
 {
-    return PolynomialLiteral<long long, string_literal<'x'>>(coef);
+    return PolynomialLiteral<long long, StringConstant<'x'>>(coef);
 }
-PolynomialLiteral<long double, string_literal<'x'>> 
+PolynomialLiteral<long double, StringConstant<'x'>> 
 operator "" _x(long double coef)
 {
-    return PolynomialLiteral<long double, string_literal<'x'>>(coef);
+    return PolynomialLiteral<long double, StringConstant<'x'>>(coef);
 }
-PolynomialLiteral<long long, string_literal<'y'>> 
+PolynomialLiteral<long long, StringConstant<'y'>> 
 operator "" _y(unsigned long long coef)
 {
-    return PolynomialLiteral<long long, string_literal<'y'>>(coef);
+    return PolynomialLiteral<long long, StringConstant<'y'>>(coef);
 }
-PolynomialLiteral<long double, string_literal<'y'>> 
+PolynomialLiteral<long double, StringConstant<'y'>> 
 operator "" _y(long double coef)
 {
-    return PolynomialLiteral<long double, string_literal<'y'>>(coef);
+    return PolynomialLiteral<long double, StringConstant<'y'>>(coef);
 }
-PolynomialLiteral<long long, string_literal<'z'>> 
+PolynomialLiteral<long long, StringConstant<'z'>> 
 operator "" _z(unsigned long long coef)
 {
-    return PolynomialLiteral<long long, string_literal<'z'>>(coef);
+    return PolynomialLiteral<long long, StringConstant<'z'>>(coef);
 }
-PolynomialLiteral<long double, string_literal<'z'>> 
+PolynomialLiteral<long double, StringConstant<'z'>> 
 operator "" _z(long double coef)
 {
-    return PolynomialLiteral<long double, string_literal<'z'>>(coef);
+    return PolynomialLiteral<long double, StringConstant<'z'>>(coef);
 }
 
 
@@ -282,7 +357,7 @@ operator "" _z(long double coef)
 
 
 
-template<typename Tp, const char *var_name = string_literal<'x'>>
+template<typename Tp, typename var_name = StringConstant<'x'>>
 class Polynomial
 {
   public:
@@ -300,7 +375,11 @@ class Polynomial
     Polynomial(Literal0) noexcept : Polynomial() {}
     Polynomial(Literal1) : Polynomial(Tp(lit1)) {}
 
-    // Polynomial& operator = (Literal0) {return *this = {};}
+    Polynomial& operator = (Literal0) 
+    {
+        coeficient.clear();
+        return *this;
+    }
 
     template<typename Lit>
     Polynomial(const PolynomialLiteral<Lit, var_name> &lit) : Polynomial()
@@ -314,7 +393,7 @@ class Polynomial
 
     int degree() const
     {
-        return coeficient.size() - 1;
+        return coeficient.size() + coeficient.empty() - 1;
     }
 
     explicit operator bool () const
@@ -410,12 +489,22 @@ class Polynomial
     }
     Polynomial& operator /= (const Polynomial &rhs) &
     {
+        if (!rhs) throw std::invalid_argument("divide by zero!");
+        if (degree() < rhs.degree()) return *this = {};
+        if (rhs.degree() == 0) {
+          for(auto &coef : coeficient)
+            coef /= rhs[0];
+          return *this;
+        }
         Polynomial lhs = std::move(*this), remainder;
         divide(lhs, rhs, *this, remainder);
         return *this;
     }
     Polynomial& operator %= (const Polynomial &rhs) &
     {
+        if (!rhs) throw std::invalid_argument("divide by zero!");
+        if (degree() < rhs.degree()) return *this;
+        if (rhs.degree() == 0) return *this = {};
         Polynomial lhs = std::move(*this), quotient;
         divide(lhs, rhs, quotient, *this);
         return *this;
@@ -489,6 +578,17 @@ class Polynomial
         return static_cast<Polynomial>(lhs) % rhs;
     }
 
+    Tp operator () (Tp input) const
+    {
+        Tp res = (*this)[0];
+        if (degree() >= 1) res += (*this)[1] * input;
+        Tp exp = input;
+        for(int i = 2; i <= degree(); ++i) {
+          exp *= input;
+          res += (*this)[i] * exp;
+        }
+        return res;
+    }
 
   private:
     static void divide(const Polynomial &lhs, const Polynomial &rhs,
@@ -533,51 +633,151 @@ class Polynomial
 };
 
 
-template<typename Tp1, typename Tp2, const char *var_name>
+template<typename Tp1, typename Tp2, typename var_name>
 Polynomial<Tp1, var_name> 
 operator + (Tp1 lhs, PolynomialLiteral<Tp2, var_name> rhs)
 {
     return lhs + Polynomial<Tp1, var_name>(std::move(rhs));
 }
-template<typename Tp1, typename Tp2, const char *var_name>
+template<typename Tp1, typename Tp2, typename var_name>
 Polynomial<Tp2, var_name> 
 operator + (PolynomialLiteral<Tp1, var_name> lhs, Tp2 rhs)
 {
     return Polynomial<Tp2, var_name>(std::move(lhs)) + rhs;
 }
-template<typename Tp1, typename Tp2, const char *var_name>
+template<typename Tp1, typename Tp2, typename var_name>
 Polynomial<Tp1, var_name> 
 operator - (Tp1 lhs, PolynomialLiteral<Tp2, var_name> rhs)
 {
     return lhs - Polynomial<Tp1, var_name>(std::move(rhs));
 }
-template<typename Tp1, typename Tp2, const char *var_name>
+template<typename Tp1, typename Tp2, typename var_name>
 Polynomial<Tp2, var_name> 
 operator - (PolynomialLiteral<Tp1, var_name> lhs, Tp2 rhs)
 {
     return Polynomial<Tp2, var_name>(std::move(lhs)) - rhs;
 }
-template<typename Tp1, typename Tp2, const char *var_name>
+template<typename Tp1, typename Tp2, typename var_name>
 Polynomial<Tp1, var_name> 
 operator * (Tp1 lhs, PolynomialLiteral<Tp2, var_name> rhs)
 {
     return lhs * Polynomial<Tp1, var_name>(std::move(rhs));
 }
-template<typename Tp1, typename Tp2, const char *var_name>
+template<typename Tp1, typename Tp2, typename var_name>
 Polynomial<Tp2, var_name> 
 operator * (PolynomialLiteral<Tp1, var_name> lhs, Tp2 rhs)
 {
     return Polynomial<Tp2, var_name>(std::move(lhs)) * rhs;
 }
-template<typename Tp1, typename Tp2, const char *var_name>
+template<typename Tp1, typename Tp2, typename var_name>
 Polynomial<Tp2, var_name> 
 operator / (PolynomialLiteral<Tp1, var_name> lhs, Tp2 rhs)
 {
     return Polynomial<Tp2, var_name>(std::move(lhs)) / rhs;
 }
 
+
+
+template<typename Tp, 
+         typename = typename std::enable_if<
+           std::is_floating_point<Tp>::value>::type>
+std::vector<Tp> solve(Polynomial<Tp> equation)
+{
+    using std::sqrt;
+    using std::cbrt;
+    using std::abs;
+
+    if (!equation) 
+      throw std::invalid_argument("infinite solution");
+    std::vector<Tp> res;
+
+    int trailing_zero = 0;
+    while(!equation[trailing_zero]) ++trailing_zero;
+    if (trailing_zero) {
+      res.push_back(0);
+      equation /= 1_x^(trailing_zero);
+    }
+
+    if(equation.degree() == 0) {}
+
+    else if (equation.degree() == 1) res.push_back(-equation[0] / equation[1]);
+
+    else if (equation.degree() == 2) {
+      Tp a = equation[2], b = equation[1], c = equation[0];
+      Tp delta = b * b - 4 * a * c;
+      const Tp inv2a = 1 / (2 * a);
+      if (delta == 0) res.push_back(-b * inv2a);
+      else if (delta > 0) {
+        Tp sdelta = sqrt(delta);
+        res.push_back((-b - sdelta) * inv2a);
+        res.push_back((-b + sdelta) * inv2a);
+      }
+    }
+
+    else if (equation.degree() == 3) {
+      Tp a = equation[3], b = equation[2], c = equation[1], d = equation[0];
+      Tp delta0 = b * b - 3 * a * c;
+      Tp delta1 = 2 * b * b * b - 9 * a * b * c + 27 * a * a * d;
+      const Tp inv3a = 1 / (3 * a);
+      if (!delta0 && !delta1) res.push_back(-b * inv3a);
+      else {
+        Tp sub = delta1 * delta1 - 4 * delta0 * delta0 * delta0;
+        if (sub >= 0) {
+          Tp C = cbrt((delta1 + sqrt(sub)) * 0.5);
+          Tp root1 = -(b + C + delta0 / C) * inv3a;
+          res.push_back(root1);
+          if (approxEqual<Tp>(sub, 0))
+            res.push_back(-(b - C) * inv3a);
+        }
+        else {
+          std::complex<Tp> C(delta1 * .5, sqrt(-sub) * .5);
+          const std::complex<Tp> unity{-.5, .5 * sqrt(static_cast<Tp>(3))};
+          C = pow(C, 0.33333333333333l);
+          res.push_back(-(b + C.real() * 2) * inv3a);
+          C *= unity;
+          res.push_back(-(b + C.real() * 2) * inv3a);
+          C *= unity;
+          res.push_back(-(b + C.real() * 2) * inv3a);
+        }
+      }
+    }
+
+    else throw std::invalid_argument("equation with degree 3 or more is not supported :<");
+
+    std::sort(res.begin(), res.end());
+    res.resize(std::unique(res.begin(), res.end()) - res.begin());
+    return res;
+}
+template<typename Tp, 
+         typename = typename std::enable_if<
+           std::is_integral<Tp>::value>::type>
+std::vector<double> solve(const Polynomial<Tp> &equation)
+{
+    Polynomial<double> conv;
+    for(int i = equation.degree(); i >= 0; --i)
+      conv.set(i, equation[i]);
+    return solve(conv);
+}
+std::vector<long double> solve(const Polynomial<long long> &equation)
+{
+    Polynomial<long double> conv;
+    for(int i = equation.degree(); i >= 0; --i)
+      conv.set(i, equation[i]);
+    return solve(conv);
+}
+template<typename Tp>
+std::vector<long double> solve(PolynomialLiteral<Tp> equation)
+{
+    return solve(static_cast<Polynomial<long double>>(equation));
+}
+
+
+
+
+
+
 template<typename istr>
-bool check_var_name(istr &is, const char *var_name, int len)
+bool tryGetVar(istr &is, const char *var_name, int len)
 {
     int cur = 0;
     while (cur < len) {
@@ -592,13 +792,13 @@ bool check_var_name(istr &is, const char *var_name, int len)
     return true;
 }
 
-template<typename istr, typename Tp, const char *var_name, 
+template<typename istr, typename Tp, typename var_name, 
          typename = decltype(std::declval<istr&>() >> std::declval<char*>())>
 istr&& operator >> (istr &&is, Polynomial<Tp, var_name> &poly)
 {
 #define return_early return std::forward<istr>(is)
 #define failure_return {poly = {}; is.setstate(is.failbit); return_early;}
-    static constexpr int name_len = strlen(var_name);
+    static constexpr int name_len = var_name::size();
     poly = {};
     if (!is) failure_return;
     ignoreVoid(is);
@@ -619,7 +819,7 @@ istr&& operator >> (istr &&is, Polynomial<Tp, var_name> &poly)
       ignoreVoid(is);
       bool neg = (is.peek() != is.eof() && static_cast<char>(is.peek()) == '-');
       if (neg) is.get();
-      bool check_var = check_var_name(is, var_name, name_len);
+      bool check_var = tryGetVar(is, var_name{}, name_len);
       if (check_var) current_coef = lit1;
       else {
         if(neg) is.unget();
@@ -631,7 +831,7 @@ istr&& operator >> (istr &&is, Polynomial<Tp, var_name> &poly)
       if (!check_var) {
         if (entry == '(') ignoreVoid(is);
         if (entry == '(' || !nextIsVoid(is)) {
-          if (!check_var) check_var = check_var_name(is, var_name, name_len);
+          if (!check_var) check_var = tryGetVar(is, var_name{}, name_len);
           if (entry != '(' && !check_var) failure_return;
         }
       }
@@ -670,14 +870,14 @@ istr&& operator >> (istr &&is, Polynomial<Tp, var_name> &poly)
       is.get();
 
       ignoreVoid(is);
-      bool check_var = check_var_name(is, var_name, name_len);
+      bool check_var = tryGetVar(is, var_name{}, name_len);
       if (check_var) current_coef = lit1;
       else if (!(is >> current_coef)) failure_return;
       if (sign == '-') current_coef = -current_coef;
 
       int deg = 0;
       ignoreVoid(is);
-      if (check_var || check_var_name(is, var_name, name_len)) {
+      if (check_var || tryGetVar(is, var_name{}, name_len)) {
         deg = 1;
 
         ignoreVoid(is);
@@ -701,12 +901,15 @@ std::string termStr(const char *var, Tp val, int deg)
 {
     std::ostringstream res;
     if (val == 1 && deg > 0) {}
-    else res << parenthesized(val);
+    else {
+      if (deg > 0) res << parenthesized(val);
+      else res << val;
+    }
     if (deg > 0) res << var;
     if (deg > 1) res << "^" << deg;
     return res.str();
 }
-template<typename ostr, typename Tp, const char *var_name, 
+template<typename ostr, typename Tp, typename var_name, 
          typename=decltype(std::declval<ostr&>()<<std::declval<const char*>())>
 ostr&& operator << (ostr &&os, Polynomial<Tp, var_name> poly)
 {
@@ -717,7 +920,7 @@ ostr&& operator << (ostr &&os, Polynomial<Tp, var_name> poly)
         os << "-";
         coef = -coef;
       }
-      os << termStr(var_name, coef, poly.degree());
+      os << termStr(var_name{}, coef, poly.degree());
     }
     for(int i = poly.degree() - 1; i >= 0; --i) 
       if (poly[i]) {
@@ -728,11 +931,11 @@ ostr&& operator << (ostr &&os, Polynomial<Tp, var_name> poly)
           coef = -coef;
         } 
         else os << "+ ";
-        os << termStr(var_name, coef, i);
+        os << termStr(var_name{}, coef, i);
       }
     return std::forward<ostr>(os);
 }
-template<typename ostr, typename Tp, const char *var_name, typename = decltype(
+template<typename ostr, typename Tp, typename var_name, typename = decltype(
              std::declval<ostr&>().operator << (std::declval<const char*>()))>
 ostr&& operator << (ostr &&os, PolynomialLiteral<Tp, var_name> poly)
 {
@@ -767,3 +970,4 @@ ostr&& operator << (ostr &&os, PolynomialLiteral<Tp, var_name> poly)
 //       }
 //     return os;
 // }
+#endif //POLYNOMIAL_H_INCLUDED

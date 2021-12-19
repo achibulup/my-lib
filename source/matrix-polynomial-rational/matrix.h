@@ -110,6 +110,19 @@ class Matrix
         }
     }
 
+    Matrix& operator = (Literal0) &
+    {
+        for(auto &elem : m_data)
+          elem = 0;
+        return *this;
+    } 
+    Matrix& operator = (Literal1) &
+    {
+        if (rows() != cols()) 
+          throw std::invalid_argument("matrix is not square");
+        return *this = identity(rows);
+    }
+
 
     Matrix& resize(int m, int n) &
     {
@@ -147,6 +160,17 @@ class Matrix
         for(const Tp& val : m_data)
           if (val) return true;
         return false;
+    }
+
+    friend Matrix operator + (Matrix mtr)
+    {
+        return mtr;
+    }
+    friend Matrix operator - (Matrix mtr)
+    {
+        for(auto &elem : mtr.m_data)
+          elem = -elem;
+        return mtr;
     }
 
     void swapRow(int row1, int row2) &
@@ -221,14 +245,57 @@ class Matrix
         for(auto &&elem : view(getCol(dest_col), getCol(src_col)))
           elem.first -= elem.second * mult;
     }
+    
 
-  private:
-    int mRow, m_col;
-    std::vector<Tp> m_data;
-
-    int getIndex(int i, int j) const
+    friend Matrix operator * (Tp mul, const Matrix &mt)
     {
-        return (i - 1) * cols() + (j - 1);
+        Matrix res(mt.rows(), mt.cols());
+        mulTo(mul, mt, &res);
+        return res;
+    }
+    friend Matrix operator * (const Matrix &mt, Tp mul)
+    {
+        Matrix res(mt.rows(), mt.cols());
+        mulTo(mt, mul, &res);
+        return res;
+    }
+    friend Matrix operator + (const Matrix &lhs, const Matrix &rhs)
+    {
+        if (lhs.rows() != rhs.rows() || lhs.cols() != rhs.cols())
+          throw std::invalid_argument("mismatching Matrix size");
+        Matrix res(lhs.rows(), lhs.cols());
+        addTo(lhs, rhs, &res);
+        return res;
+    }
+    friend Matrix operator - (const Matrix &lhs, const Matrix &rhs)
+    {
+        if (lhs.rows() != rhs.rows() || lhs.cols() != rhs.cols())
+          throw std::invalid_argument("mismatching Matrix size");
+        Matrix res(lhs.rows(), lhs.cols());
+        subTo(lhs, rhs, &res);
+        return res;
+    }
+    friend Matrix operator * (const Matrix &lhs, const Matrix &rhs)
+    {
+        if (lhs.cols() != rhs.rows())
+          throw std::invalid_argument("mismatching Matrix size");
+        Matrix res(lhs.rows(), rhs.cols());
+        mulTo(lhs, rhs, &res);
+        return res;
+    }
+    friend Matrix& operator += (Matrix &lhs, const Matrix &rhs)
+    {
+        addTo(lhs, rhs, &lhs);
+        return lhs;
+    }
+    friend Matrix& operator -= (Matrix &lhs, const Matrix &rhs)
+    {
+        subTo(lhs, rhs, &lhs);
+        return lhs;
+    }
+    friend Matrix& operator *= (Matrix &lhs, const Matrix &rhs)
+    {
+        return lhs = lhs * rhs;
     }
 
     class Row
@@ -371,121 +438,71 @@ class Matrix
         const int n;
     };
 
-    Row getRow(int i) &
+    Row getRow(int i)
     {
         return Row(*this, i);
     }
-    Col getCol(int i) &
+    Col getCol(int i)
     {
         return Col(*this, i);
     }
+
+  private:    
+    static void mulTo(const Matrix &mt, Tp mul, Matrix *res)
+    {
+        int m = mt.rows(), n = mt.cols();
+        for(int i = 1; i <= m; ++i)
+        for(int j = 1; j <= n; ++j)
+          (*res)[{i, j}] = mt[{i, j}] * mul;
+    }
+    static void mulTo(Tp mul, const Matrix &mt, Matrix *res)
+    {
+        int m = mt.rows(), n = mt.cols();
+        for(int i = 1; i <= m; ++i)
+        for(int j = 1; j <= n; ++j)
+          (*res)[{i, j}] = mul * mt[{i, j}];
+    }
+    static void addTo(const Matrix &lhs, const Matrix &rhs, Matrix *res)
+    {
+        int m = lhs.rows(), n = lhs.cols();
+        for(int i = 1; i <= m; ++i)
+        for(int j = 1; j <= n; ++j)
+          (*res)[{i, j}] = lhs[{i, j}] + rhs[{i, j}];
+    }
+    static void subTo(const Matrix &lhs, const Matrix &rhs, Matrix *res)
+    {
+        int m = lhs.rows(), n = lhs.cols();
+        for(int i = 1; i <= m; ++i)
+        for(int j = 1; j <= n; ++j)
+          (*res)[{i, j}] = lhs[{i, j}] - rhs[{i, j}];
+    }
+    static void mulTo(const Matrix &lhs, const Matrix &rhs, Matrix *res)
+    {
+        int m = lhs.rows(), n = lhs.cols(), p = rhs.cols();
+        for(int i = 1; i <= m; ++i)
+        for(int j = 1; j <= p; ++j){
+          Tp sum{};
+          for(int k = 1; k <= n; ++k)
+            sum += lhs[{i, k}] * rhs[{k, j}];
+          (*res)[{i, j}] = sum;
+        }
+    }
+
+
+    int getIndex(int i, int j) const
+    {
+        return (i - 1) * cols() + (j - 1);
+    }
+
+
+    int mRow, m_col;
+    std::vector<Tp> m_data;
 };
 template<typename matrix>
 using MatrixElem = typename std::remove_const_t<
                             std::remove_reference_t<matrix>>::Element;
 
 
-// template<typename matrix>
-// void swapRow(matrix &&mtr, int row1, int row2)
-// {
-//     using std::swap;
-//     int n = mtr.cols();
-//     for(int j = 1; j <= n; ++j)
-//       swap(mtr[{row1, j}], mtr[{row2, j}]);
-// }
-// template<typename matrix>
-// void mulRow(matrix &&mtr, int row, MatrixElem<matrix> val)
-// {
-//     int n = mtr.cols();
-//     for(int j = 1; j <= n; ++j)
-//       mtr[{row, j}] *= val;
-// }
-// template<typename matrix>
-// void divRow(matrix &&mtr, int row, MatrixElem<matrix> val)
-// {
-//     int n = mtr.cols();
-//     for(int j = 1; j <= n; ++j)
-//       mtr[{row, j}] /= val;
-// }
-// template<typename matrix>
-// void addRow(matrix &&mtr, int dest_row, int src_row)
-// {
-//     int n = mtr.cols();
-//     for(int j = 1; j <= n; ++j)
-//       mtr[{dest_row, j}] += mtr[{src_row, j}];
-// }
-// template<typename matrix>
-// void addRow(matrix &&mtr, int dest_row, int src_row, MatrixElem<matrix> mult)
-// {
-//     int n = mtr.cols();
-//     for(int j = 1; j <= n; ++j)
-//       mtr[{dest_row, j}] += mtr[{src_row, j}] * mult;
-// }
-// template<typename matrix>
-// void subRow(matrix &&mtr, int dest_row, int src_row)
-// {
-//     int n = mtr.cols();
-//     for(int j = 1; j <= n; ++j)
-//       mtr[{dest_row, j}] -= mtr[{src_row, j}];
-// }
-// template<typename matrix>
-// void subRow(matrix &&mtr, int dest_row, int src_row, MatrixElem<matrix> mult)
-// {
-//     int n = mtr.cols();
-//     for(int j = 1; j <= n; ++j)
-//       mtr[{dest_row, j}] -= mtr[{src_row, j}] * mult;
-// }
-
-// template<typename matrix>
-// void swapCol(matrix &&mtr, int col1, int col2)
-// {
-//     using std::swap;
-//     int m = mtr.rows();
-//     for(int i = 1; i <= m; ++i)
-//       swap(mtr[{i, col1}], mtr[{i, col2}]);
-// }
-// template<typename matrix>
-// void mulCol(matrix &&mtr, int col, MatrixElem<matrix> val)
-// {
-//     int m = mtr.rows();
-//     for(int i = 1; i <= m; ++i)
-//       mtr[{i, col}] *= val;
-// }
-// template<typename matrix>
-// void divCol(matrix &&mtr, int col, MatrixElem<matrix> val)
-// {
-//     int m = mtr.rows();
-//     for(int i = 1; i <= m; ++i)
-//       mtr[{i, col}] /= val;
-// }
-// template<typename matrix>
-// void addCol(matrix &&mtr, int dest_col, int src_col)
-// {
-//     int m = mtr.rows();
-//     for(int i = 1; i <= m; ++i)
-//       mtr[{i, dest_col}] += mtr[{i, src_col}];
-// }
-// template<typename matrix>
-// void addCol(matrix &&mtr, int dest_col, int src_col, MatrixElem<matrix> mult)
-// {
-//     int m = mtr.rows();
-//     for(int i = 1; i <= m; ++i)
-//       mtr[{i, dest_col}] += mtr[{i, src_col}] * mult;
-// }
-// template<typename matrix>
-// void subCol(matrix &&mtr, int dest_col, int src_col)
-// {
-//     int m = mtr.rows();
-//     for(int i = 1; i <= m; ++i)
-//       mtr[{i, dest_col}] -= mtr[{i, src_col}];
-// }
-// template<typename matrix>
-// void subCol(matrix &&mtr, int dest_col, int src_col, MatrixElem<matrix> mult)
-// {
-//     int m = mtr.rows();
-//     for(int i = 1; i <= m; ++i)
-//       mtr[{i, dest_col}] -= mtr[{i, src_col}] * mult;
-// }
 
 template<typename Tp, int N>
 class BoundMatrices
@@ -676,99 +693,6 @@ bool operator != (Literal1, const Matrix<Tp> &r)
 
 
 
-template<typename Tp>
-void mul_to(const Matrix<Tp> &mt, Tp mul, Matrix<Tp> *res)
-{
-    int m = mt.rows(), n = mt.cols();
-    for(int i = 1; i <= m; ++i)
-    for(int j = 1; j <= n; ++j)
-      (*res)[{i, j}] = mt[{i, j}] * mul;
-}
-template<typename Tp>
-void mul_to(Tp mul, const Matrix<Tp> &mt, Matrix<Tp> *res)
-{
-    int m = mt.rows(), n = mt.cols();
-    for(int i = 1; i <= m; ++i)
-    for(int j = 1; j <= n; ++j)
-      (*res)[{i, j}] = mul * mt[{i, j}];
-}
-template<typename Tp>
-void add_to(const Matrix<Tp> &lhs, const Matrix<Tp> &rhs, Matrix<Tp> *res)
-{
-    int m = lhs.rows(), n = lhs.cols();
-    for(int i = 1; i <= m; ++i)
-    for(int j = 1; j <= n; ++j)
-      (*res)[{i, j}] = lhs[{i, j}] + rhs[{i, j}];
-}
-template<typename Tp>
-void sub_to(const Matrix<Tp> &lhs, const Matrix<Tp> &rhs, Matrix<Tp> *res)
-{
-    int m = lhs.rows(), n = lhs.cols();
-    for(int i = 1; i <= m; ++i)
-    for(int j = 1; j <= n; ++j)
-      (*res)[{i, j}] = lhs[{i, j}] - rhs[{i, j}];
-}
-template<typename Tp>
-void mul_to(const Matrix<Tp> &lhs, const Matrix<Tp> &rhs, Matrix<Tp> *res)
-{
-    int m = lhs.rows(), n = lhs.cols(), p = rhs.cols();
-    for(int i = 1; i <= m; ++i)
-    for(int j = 1; j <= p; ++j){
-      Tp sum{};
-      for(int k = 1; k <= n; ++k)
-        sum += lhs[{i, k}] * rhs[{k, j}];
-      (*res)[{i, j}] = sum;
-    }
-}
-
-
-
-template<typename Tp>
-Matrix<Tp> operator * (Tp mul, const Matrix<Tp> &mt)
-{
-    Matrix<Tp> res(mt.rows(), mt.cols());
-    mul_to(mul, mt, &res);
-    return res;
-}
-template<typename Tp>
-Matrix<Tp> operator * (const Matrix<Tp> &mt, Tp mul)
-{
-    Matrix<Tp> res(mt.rows(), mt.cols());
-    mul_to(mt, mul, &res);
-    return res;
-}
-template<typename Tp>
-Matrix<Tp> operator + (const Matrix<Tp> &lhs, const Matrix<Tp> &rhs)
-{
-    if (lhs.rows() != rhs.rows() || lhs.cols() != rhs.cols())
-      throw std::invalid_argument("mismatching Matrix size");
-    Matrix<Tp> res(lhs.rows(), lhs.cols());
-    add_to(lhs, rhs, &res);
-    return res;
-}
-template<typename Tp>
-Matrix<Tp> operator - (const Matrix<Tp> &lhs, const Matrix<Tp> &rhs)
-{
-    if (lhs.rows() != rhs.rows() || lhs.cols() != rhs.cols())
-      throw std::invalid_argument("mismatching Matrix size");
-    Matrix<Tp> res(lhs.rows(), lhs.cols());
-    sub_to(lhs, rhs, &res);
-    return res;
-}
-template<typename Tp>
-Matrix<Tp> operator * (const Matrix<Tp> &lhs, const Matrix<Tp> &rhs)
-{
-    if (lhs.cols() != rhs.rows())
-      throw std::invalid_argument("mismatching Matrix size");
-    Matrix<Tp> res(lhs.rows(), rhs.cols());
-    mul_to(lhs, rhs, &res);
-    return res;
-}
-template<typename Tp>
-Matrix<Tp>& operator *= (Matrix<Tp> &lhs, const Matrix<Tp> &rhs)
-{
-    lhs = lhs * rhs;
-}
 
 
 template<typename Tp,
@@ -904,7 +828,7 @@ Matrix<Tp> inverse(Matrix<Tp> mtr)
     return res;
 }
 template<typename Tp>
-Matrix<Tp> pow(Matrix<Tp> base, int exp)
+Matrix<Tp> pow(Matrix<Tp> base, std::uintmax_t exp)
 {
     // if (exp < 0) return pow(inverse(base), -exp);
     if (base.rows() != base.cols())
