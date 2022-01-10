@@ -428,21 +428,21 @@ class RelaxedPtr<const void>
 
 
 template<typename Tp>
-inline RelaxedPtr<Tp> new_buffer(size_t s)
+inline RelaxedPtr<Tp> newBuffer(size_t s)
 {
     if(s < 0) throw std::bad_alloc();
     return s ? static_cast<Tp*>(static_cast<void*>(new byte[s * ssizeof<Tp>()])) 
              : nullptr;
 }
-inline RelaxedPtr<void> new_buffer(size_t s)
+inline RelaxedPtr<void> newBuffer(size_t s)
 {
-    return new_buffer<byte>(s);
+    return newBuffer<byte>(s);
 }
 template<typename Tp>
-inline void delete_buffer(RelaxedPtr<Tp> ptr)
+inline void deleteBuffer(RelaxedPtr<Tp> ptr)
 {
-    delete[] static_cast<copy_cvref_t<Tp, byte>*>
-        (static_cast<copy_cvref_t<Tp, void>*>(ptr));
+    delete[] static_cast<const byte*>
+        (static_cast<const void*>(ptr));
 }
 
 
@@ -592,6 +592,66 @@ struct constructor<Tp, false>
 };
 
 
+class Buffer
+{
+  public:
+    using pointer = RelaxedPtr<void>;
+
+    Buffer() noexcept : size(0), m_buffer(){}
+
+    Buffer(size_t len) : size(len), m_buffer(newBuffer(len)) {}
+
+    Buffer(Buffer &&mov) noexcept 
+    : size(Move(mov.size)), m_buffer(Move(mov.m_buffer)) {}
+    
+    void operator = (Buffer) = delete;
+
+    ~Buffer()
+    {
+        this->reset();
+    }
+
+    friend void swap(Buffer &a, Buffer &b) noexcept
+    {
+        a.doSwap(b);
+    }
+
+    ReadOnlyProperty<size_t, Buffer> size;
+
+    void reset(size_t new_cap)
+    {
+        if (new_cap > this->size){
+            Buffer tmp(new_cap);
+            swap(*this, tmp);
+        }
+    }
+    void reset()
+    {
+        deleteBuffer(this->m_buffer);
+        this->size = 0;
+    }
+
+
+    void* buffer() const noexcept
+    {
+        return this->m_buffer;
+    }
+    pointer data() const noexcept
+    {
+        return this->m_buffer;
+    }
+
+  private:
+    void doSwap(Buffer &b) noexcept
+    {
+        using std::swap;
+        swap(this->m_buffer, b.m_buffer);
+        this->size.swap(b.size);
+    }
+
+
+    pointer m_buffer;
+};
 
 } //namespace Achibulup
 

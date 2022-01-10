@@ -37,142 +37,120 @@ using remove_const_ptr_ref_t = typename std::remove_const<typename std::remove_p
 
 namespace n_Any_helper{
 
-using CopyCtor_t = void(*)(RelaxedPtr<void>, RelaxedPtr<const void>);
-using EqualComparator_t = bool(*)(RelaxedPtr<const void>, RelaxedPtr<const void>);
-using Destructor_t = void(*)(RelaxedPtr<void>);
+using CopyCtor = void(*)(RelaxedPtr<void>, RelaxedPtr<const void>);
+using Destructor = void(*)(RelaxedPtr<const void>);
+using PointerThrow = void(*)(RelaxedPtr<void>);
+using StringFormatter = void(*)(std::ostream&, RelaxedPtr<const void>);
+using EqualComparator = bool(*)(RelaxedPtr<const void>, RelaxedPtr<const void>);
 
 
-template<typename Tp>
-void CopyCtor(RelaxedPtr<void> dest, RelaxedPtr<const void> source)
-{
-    new (dest) Tp(*static_cast<const Tp*>(source));
-}
-template<typename Tp>
-bool EqualComparator(RelaxedPtr<const void> l, RelaxedPtr<const void> r)
-{
-    return *static_cast<const Tp*>(l) == *static_cast<const Tp*>(r);
-}
-template<typename Tp>
-void Destructor(RelaxedPtr<void> ptr) noexcept
-{
-    Achibulup::destructor<Tp>::destroy(static_cast<Tp*>(ptr));
-}
 
 
-template<typename Tp
-    , EnableIf_t<std::is_convertible<const Tp&, Tp>::value>* = nullptr>
-constexpr CopyCtor_t GetCopyCtor() noexcept
+template<typename Tp, 
+    EnableIf_t<std::is_convertible<const Tp&, Tp>::value>* = nullptr>
+constexpr CopyCtor getCopyCtorHelper(int) noexcept
 {
-    return CopyCtor<Tp>;
-}
-template<typename Tp, typename = void
-    , EnableIf_t<!std::is_convertible<const Tp&, Tp>::value>* = nullptr>
-constexpr CopyCtor_t GetCopyCtor() noexcept
-{
-    return nullptr;
-}
-
-template<typename Tp
-    , typename = decltype(std::declval<const Tp&>() == std::declval<const Tp&>())>
-constexpr EqualComparator_t GetEqualComparatorHelper(int) noexcept
-{
-    return EqualComparator<Tp>;
+    return +[](RelaxedPtr<void> dest, RelaxedPtr<const void> source) {
+        new (dest) Tp(*static_cast<const Tp*>(source));
+    };
 }
 template<typename Tp, typename Tp2>
-constexpr EqualComparator_t GetEqualComparatorHelper(Tp2) noexcept
+constexpr CopyCtor getCopyCtorHelper(Tp2) noexcept
 {
     return nullptr;
 }
 template<typename Tp>
-constexpr EqualComparator_t GetEqualComparator() noexcept
+constexpr CopyCtor getCopyCtor() noexcept
 {
-    return GetEqualComparatorHelper<Tp>(0);
+    return getCopyCtorHelper<Tp>(0);
 }
 
 template<typename Tp>
-constexpr Destructor_t GetDestructor() noexcept
+constexpr Destructor getDestructor() noexcept
 {
-    return Destructor<Tp>;
+    return +[](RelaxedPtr<const void> ptr) {
+        using Type = Tp;
+        static_cast<const Type*>(ptr)->~Type();
+    };
 }
+
+template<typename Tp>
+constexpr PointerThrow getPointerThrow() noexcept
+{
+    return +[](RelaxedPtr<void> ptr) {
+        throw static_cast<Tp*>(ptr);
+    };
+}
+
+template<typename Tp, 
+    typename = decltype(std::declval<const Tp&>() == std::declval<const Tp&>())>
+constexpr EqualComparator getEqualComparatorHelper(int) noexcept
+{
+    return +[](RelaxedPtr<const void> lhs, RelaxedPtr<const void> rhs) -> bool {
+        return *static_cast<const Tp*>(lhs) == *static_cast<const Tp*>(rhs);
+    };
+}
+template<typename Tp, typename Tp2>
+constexpr EqualComparator getEqualComparatorHelper(Tp2) noexcept
+{
+    return nullptr;
+}
+template<typename Tp>
+constexpr EqualComparator getEqualComparator() noexcept
+{
+    return getEqualComparatorHelper<Tp>(0);
+}
+
+template<typename Tp, typename = decltype(
+            std::declval<std::ostream&>() << std::declval<const Tp&>())>
+constexpr StringFormatter getStringFormatterHelper(int) noexcept
+{
+    return +[](std::ostream &os, RelaxedPtr<const void> obj) {
+        os << *static_cast<const Tp*>(obj);
+    };
+}
+template<typename Tp, typename Tp2>
+constexpr StringFormatter getStringFormatterHelper(Tp2) noexcept
+{
+    return +[](std::ostream &os, RelaxedPtr<const void>) {
+        os << typeid(Tp).name();
+    };
+}
+template<typename Tp>
+constexpr StringFormatter getStringFormatter() noexcept
+{
+    return getStringFormatterHelper<Tp>(0);
+}
+
 
 
 struct AnyTypeManagerStructure
 {
     size_t size;
-    CopyCtor_t CopyCtor;
-    EqualComparator_t EqualComparator;
-    Destructor_t Destructor;
+    CopyCtor copyCtor;
+    Destructor destruct;
     const std::type_info *typeinfo;
+    PointerThrow throwPointer;
+    EqualComparator equalCompare;
+    StringFormatter formatTo;
 };
 template<typename Tp>
 struct AnyTypeManager
 {
     static constexpr AnyTypeManagerStructure manager{
         ssizeof<Tp>(),
-        GetCopyCtor<Tp>(),
-        GetEqualComparator<Tp>(),
-        GetDestructor<Tp>(),
-        &typeid(Tp)
+        getCopyCtor<Tp>(),
+        getDestructor<Tp>(),
+        &typeid(Tp),
+        getPointerThrow<Tp>(),
+        getEqualComparator<Tp>(),
+        getStringFormatter<Tp>()
     };
 };
 template<typename Tp>
 const AnyTypeManagerStructure AnyTypeManager<Tp>::manager;
 
 
-class AnyBuffer
-{
-  public:
-    AnyBuffer() noexcept : i_ptr(), capacity(0) {}
-
-    AnyBuffer(size_t len) : i_ptr(new_buffer(len)), capacity(len) {}
-
-    AnyBuffer(AnyBuffer &&mov) noexcept 
-    : i_ptr(Move(mov.i_ptr)), capacity(Move(mov.capacity)) {}
-
-    ~AnyBuffer()
-    {
-        delete_buffer(i_ptr);
-    }
-
-    friend void swap(AnyBuffer &a, AnyBuffer &b) noexcept
-    {
-        AnyBuffer::swap(a, b);
-    }
-
-  private:
-    using pointer = RelaxedPtr<void>;
-    pointer i_ptr;
-
-  public:
-    ReadOnlyProperty<size_t, AnyBuffer> capacity;
-
-    void reset(size_t new_cap)
-    {
-        if (new_cap > this->capacity){
-            AnyBuffer tmp(new_cap);
-            swap(*this, tmp);
-        }
-    }
-
-    void operator = (AnyBuffer) = delete;
-
-    void* Get_buffer() const noexcept
-    {
-        return this->i_ptr;
-    }
-    pointer data() const noexcept
-    {
-        return this->i_ptr;
-    }
-
-  private:
-    static void swap(AnyBuffer &a, AnyBuffer &b) noexcept
-    {
-        using std::swap;
-        swap(a.i_ptr, b.i_ptr);
-        swap(a.capacity.value, b.capacity.value);
-    }
-};
 
 } //namespace n_Any_helper
 
@@ -181,7 +159,7 @@ class AnyBuffer
 class Any
 {
   public:
-    Any() noexcept : i_buffer(), i_manager() {}
+    Any() noexcept : m_buffer(), m_manager() {}
 
     template<typename Tp0,
         EnableIf_t<!std::is_same<decay_t<Tp0>, Any>::value>* = nullptr>
@@ -190,27 +168,19 @@ class Any
         using Tp = decay_t<Tp0>;
         this->unsafe_emplace<Tp>(std::forward<Tp0>(val));
     }
-
-    Any(Any &&mov) noexcept
-    : i_buffer(Move(mov.i_buffer)), i_manager(Move(mov.i_manager)) {}
-
-    Any(const Any &cpy) : i_buffer(cpy.i_manager ? cpy.i_manager->size : 0), 
-            i_manager(cpy.i_manager)
+    Any(const Any &cpy) : m_buffer(cpy.m_manager ? cpy.m_manager->size : 0), 
+                          m_manager(cpy.m_manager)
     {
-        if (cpy.i_manager){
-          if (cpy.i_manager->CopyCtor) throw bad_copy();
-          cpy.i_manager->CopyCtor(this->i_buffer.Get_buffer(), 
-                                  cpy.i_buffer.Get_buffer());
+        if (cpy.m_manager){
+          if (!cpy.m_manager->copyCtor) throw bad_copy();
+          cpy.m_manager->copyCtor(this->m_buffer.buffer(), 
+                                  cpy.m_buffer.buffer());
         }
     }
 
-    Any& operator = (Any &&mov) & noexcept
-    {
-        this->clear();
-        if (!mov.empty())
-          swap(*this, mov);
-        return *this;
-    }
+    Any(Any &&mov) noexcept
+    : m_buffer(Move(mov.m_buffer)), m_manager(Move(mov.m_manager)) {}
+
 
     Any& operator = (const Any &cpy) &
     {
@@ -218,17 +188,25 @@ class Any
         swap(*this, tmp);
         return *this;
     }
+
+    Any& operator = (Any &&mov) & noexcept
+    {
+        this->reset();
+        if (!mov.empty())
+          swap(*this, mov);
+        return *this;
+    }
     
     ~Any() noexcept
     {
-        this->clear();
+        this->reset();
     }
     
     friend void swap(Any &a, Any &b) noexcept
     {
         using std::swap;
-        swap(a.i_buffer, b.i_buffer);
-        swap(a.i_manager, b.i_manager);
+        swap(a.m_buffer, b.m_buffer);
+        swap(a.m_manager, b.m_manager);
     }
 
 
@@ -239,7 +217,7 @@ class Any
             typename ...Args>
     void emplace(Args&& ...args) &
     {
-        if (this->i_buffer.capacity >= ssizeof<Tp>() 
+        if (this->m_buffer.size() >= ssizeof<Tp>() 
         && noexcept(this->construct<Tp>(std::forward<Args>(args)...)))
           this->unsafe_emplace<Tp>(std::forward<Args>(args)...);
         else {
@@ -270,170 +248,249 @@ class Any
     Tp& operator = (Tp0 &&val) &
     {
         if ( this->is<Tp>() 
-         && noexcept(this->unguarded_cast<Tp>() = std::forward<Tp0>(val)) )
-          this->unguarded_cast<Tp>() = std::forward<Tp0>(val);
+         && noexcept(*(this->unguardedCastPtr<Tp>()) = std::forward<Tp0>(val)) )
+          *(this->unguardedCastPtr<Tp>()) = std::forward<Tp0>(val);
         else this->emplace<Tp>(std::forward<Tp0>(val));
-        return this->unguarded_cast<Tp>();
+        return *(this->unguardedCastPtr<Tp>());
     }
 
     
     static const Any null;
 
-
-    explicit operator bool () const noexcept
+    
+    const std::type_info& type() const noexcept
     {
-        return !this->empty();
+        if (this->empty()) return typeid(void);
+        return *(this->m_manager->typeinfo);
     }
+
+    
+    template<typename Tp, 
+        EnableIf_t<std::is_same<Tp, decay_t<Tp>>::value>* = nullptr>
+    bool isSame() const noexcept
+    {
+        return std::is_same<Tp, Any>::value
+        || this->m_manager == &n_Any_helper::AnyTypeManager<Tp>::manager;
+    }
+    template<typename Tp, 
+        EnableIf_t<std::is_same<Tp, decay_t<Tp>>::value>* = nullptr>
+    bool is() const noexcept
+    {
+        if ((*this).isSame<Tp>()) return true;
+        return static_cast<bool>(tryCastPtr<Tp>());
+    }
+
+
+    // template<typename Tp>
+    // explicit operator Tp () &
+    // {
+    //     return this->operator Tp&();
+    // }
+    template<typename Tp>
+    explicit operator Tp& () &
+    {
+        return this->refCast<remove_const_ref_t<Tp>>();
+    }
+
+    // template<typename Tp>
+    // explicit operator Tp () const &
+    // {
+    //     return this->operator Tp&();
+    // }
+    template<typename Tp>
+    explicit operator const Tp& () const &
+    {
+        return this->refCast<remove_const_ref_t<Tp>>();
+    }
+
+    // template<typename Tp>
+    // explicit operator Tp () &&
+    // {
+    //     return std::move(*this).operator Tp&&();
+    // }
+    template<typename Tp>
+    explicit operator Tp&& () &&
+    {
+        return std::move(this->operator Tp&());
+    }
+    // template<typename Tp>
+    // explicit operator const Tp& () &&
+    // {
+    //     return std::move(*this).operator Tp&&();
+    // }
+
+    // template<typename Tp>
+    // explicit operator Tp () const &&
+    // {
+    //     return std::move(*this).operator Tp&&();
+    // }
+    template<typename Tp>
+    explicit operator const Tp&& () const &&
+    {
+        return std::move(this->operator const Tp&());
+    }
+    // template<typename Tp>
+    // explicit operator const Tp& () const &&
+    // {
+    //     return std::move(*this).operator Tp&&();
+    // }
+
+    // template<typename Tp>
+    // explicit operator Tp&& () & = delete;
+    // template<typename Tp>
+    // explicit operator Tp&& () const & = delete;
+    // template<typename Tp>
+    // explicit operator Tp& () && = delete;
+    // template<typename Tp>
+    // explicit operator Tp& () const && = delete;
+
+    
+    template<typename Tp>
+    friend Tp AnyCast(Any &any)
+    {
+        return static_cast<Tp&>(any);
+    }
+    template<typename Tp>
+    friend Tp AnyCast(const Any &any)
+    {
+        return static_cast<const Tp&>(any);
+    }
+    template<typename Tp>
+    friend Tp AnyCast(Any &&any)
+    {
+        return static_cast<Tp&&>(std::move(any));
+    }
+    template<typename Tp>
+    friend Tp AnyCast(const Any &&any)
+    {
+        return static_cast<const Tp&&>(std::move(any));
+    }
+
+
+    template<typename Tp, EnableIf_t<std::is_same<Tp, remove_const_ref_t<Tp>>::value>* = nullptr>
+    Tp& refCast() &
+    {
+        Tp *ptr = this->ptrCast<Tp>();
+        if (!ptr) throw std::bad_cast();
+        return *ptr;
+    }
+    template<typename Tp, EnableIf_t<std::is_same<Tp, remove_const_ref_t<Tp>>::value>* = nullptr>
+    const Tp& refCast() const &
+    {
+        const Tp *ptr = this->ptrCast<Tp>();
+        if (!ptr) throw std::bad_cast();
+        return *ptr;
+    }
+    template<typename Tp, EnableIf_t<std::is_same<Tp, remove_const_ref_t<Tp>>::value>* = nullptr>
+    Tp&& refCast() &&
+    {
+        return std::move(this->refCast<Tp>());
+    }
+    template<typename Tp, EnableIf_t<std::is_same<Tp, remove_const_ref_t<Tp>>::value>* = nullptr>
+    const Tp&& refCast() const &&
+    {
+        return std::move(this->refCast<Tp>());
+    }
+
+    template<typename Tp, EnableIf_t<std::is_same<Tp, remove_const_ref_t<Tp>>::value>* = nullptr>
+    Tp* ptrCast() & noexcept
+    {
+        if (this->isSame<Tp>()) return unguardedCastPtr<Tp>();
+        return tryCastPtr<Tp>();
+    }
+    template<typename Tp, EnableIf_t<std::is_same<Tp, remove_const_ref_t<Tp>>::value>* = nullptr>
+    const Tp* ptrCast() const & noexcept
+    {
+        if (this->isSame<Tp>()) return unguardedCastPtr<Tp>();
+        return tryCastPtr<Tp>();
+    }
+
+    template<typename Tp, EnableIf_t<std::is_same<Tp, remove_const_ref_t<Tp>>::value>* = nullptr>
+    const Tp* ptrCast() const && noexcept = delete;
+
+
 
 
     friend bool operator == (const Any &l, const Any &r)
     {
-        if (l.i_manager != r.i_manager) return false;
+        if (l.m_manager != r.m_manager) return false;
         if (l.empty()) return true;
-        if (!l.i_manager->EqualComparator) throw bad_compare();
-        return l.i_manager->EqualComparator
-            (l.i_buffer.data(), r.i_buffer.data());
+        if (!l.m_manager->equalCompare) throw bad_compare();
+        return l.m_manager->equalCompare(l.m_buffer.data(), r.m_buffer.data());
     }
     friend bool operator != (const Any &l, const Any &r)
     {
         return !(l == r);
     }
 
-    
-    const std::type_info& type() const noexcept
+
+    friend std::ostream& operator << (std::ostream &os, const Any &any)
     {
-        if (this->empty()) return typeid(void);
-        return *(this->i_manager->typeinfo);
+        if (any != any.null) 
+          any.m_manager->formatTo(os, any.m_buffer.data());
+        return os;
     }
 
-    
-    template<typename Tp, 
-        EnableIf_t<std::is_same<Tp, decay_t<Tp>>::value>* = nullptr>
-    bool is() const noexcept
+    friend std::string to_string(const Any &any)
     {
-        return std::is_same<Tp, Any>::value
-        || this->i_manager == &n_Any_helper::AnyTypeManager<Tp>::manager;
-    }
-
-
-    template<typename Tp>
-    explicit operator Tp () &
-    {
-        return this->ref_cast<remove_const_ref_t<Tp>>();
-    }
-    template<typename Tp>
-    explicit operator Tp& () &
-    {
-        return this->ref_cast<remove_const_ref_t<Tp>>();
-    }
-
-    template<typename Tp>
-    explicit operator Tp () const &
-    {
-        return this->ref_cast<remove_const_ref_t<Tp>>();
-    }
-    template<typename Tp>
-    explicit operator Tp& () const &
-    {
-        return this->ref_cast<remove_const_ref_t<Tp>>();
-    }
-
-    template<typename Tp>
-    explicit operator Tp () &&
-    {
-        return std::move(this->ref_cast<remove_const_ref_t<Tp>>());
-    }
-    template<typename Tp>
-    explicit operator Tp&& () &&
-    {
-        return std::move(this->ref_cast<remove_const_ref_t<Tp>>());
-    }
-    template<typename Tp>
-    explicit operator const Tp& () &&
-    {
-        return std::move(this->ref_cast<remove_const_ref_t<Tp>>());
-    }
-
-    template<typename Tp>
-    explicit operator Tp () const &&
-    {
-        return std::move(this->ref_cast<remove_const_ref_t<Tp>>());
-    }
-    template<typename Tp>
-    explicit operator Tp&& () const &&
-    {
-        return std::move(this->ref_cast<remove_const_ref_t<Tp>>());
-    }
-    template<typename Tp>
-    explicit operator const Tp& () const &&
-    {
-        return std::move(this->ref_cast<remove_const_ref_t<Tp>>());
-    }
-
-    template<typename Tp>
-    explicit operator Tp&& () & = delete;
-    template<typename Tp>
-    explicit operator Tp&& () const & = delete;
-    template<typename Tp>
-    explicit operator Tp& () && = delete;
-    template<typename Tp>
-    explicit operator Tp& () const && = delete;
-
-
-    template<typename Tp, EnableIf_t<std::is_same<Tp, remove_const_ref_t<Tp>>::value>* = nullptr>
-    Tp& ref_cast() &
-    {
-        if (!this->is<Tp>()) throw std::bad_cast();
-        return this->unguarded_cast<Tp>();
-    }
-    template<typename Tp, EnableIf_t<std::is_same<Tp, remove_const_ref_t<Tp>>::value>* = nullptr>
-    const Tp& ref_cast() const &
-    {
-        if (!this->is<Tp>()) throw std::bad_cast();
-        return this->unguarded_cast<Tp>();
-    }
-    template<typename Tp, EnableIf_t<std::is_same<Tp, remove_const_ref_t<Tp>>::value>* = nullptr>
-    Tp&& ref_cast() &&
-    {
-        return std::move(this->ref_cast<Tp>());
-    }
-    template<typename Tp, EnableIf_t<std::is_same<Tp, remove_const_ref_t<Tp>>::value>* = nullptr>
-    const Tp&& ref_cast() const &&
-    {
-        return std::move(this->ref_cast<Tp>());
-    }
-
-    template<typename Tp, EnableIf_t<std::is_same<Tp, remove_const_ref_t<Tp>>::value>* = nullptr>
-    Tp* ptr_cast() & noexcept
-    {
-        if (!this->is<Tp>()) return nullptr;
-        return static_cast<Tp*>(this->i_buffer.data());
-    }
-    template<typename Tp, EnableIf_t<std::is_same<Tp, remove_const_ref_t<Tp>>::value>* = nullptr>
-    const Tp* ptr_cast() const & noexcept
-    {
-        if (!this->is<Tp>()) return nullptr;
-        return static_cast<const Tp*>(this->i_buffer.data());
-    }
-
-    template<typename Tp, EnableIf_t<std::is_same<Tp, remove_const_ref_t<Tp>>::value>* = nullptr>
-    const Tp* ptr_cast() const && noexcept = delete;
-
-
+        std::ostringstream format;
+        format << any;
+        return format.str();
+    } 
 
   private:
     using manager_type = const n_Any_helper::AnyTypeManagerStructure*;
-    using buffer_type = n_Any_helper::AnyBuffer;
+    using buffer_type = Buffer;
+
+    template<typename Tp>
+    Tp* tryCastPtr() noexcept
+    {
+        if (*this == Any::null) return nullptr;
+        try {
+          this->m_manager->throwPointer(m_buffer.data());
+        }
+        catch (Tp *success) {
+          return success;
+        }
+        catch (...) {}
+        return nullptr;
+    }
+    template<typename Tp>
+    const Tp* tryCastPtr() const noexcept
+    {
+        if (*this == Any::null) return nullptr;
+        try {
+          this->m_manager->throwPointer(m_buffer.data());
+        }
+        catch (const Tp *success) {
+          return success;
+        }
+        catch (...) {}
+        return nullptr;
+    }
+
+    
+
+    template<typename Tp>
+    Tp* unguardedCastPtr() noexcept
+    {
+        return static_cast<Tp*>(m_buffer.data());
+    }
+    template<typename Tp>
+    const Tp* unguardedCastPtr() const noexcept
+    {
+        return static_cast<const Tp*>(m_buffer.data());
+    }
 
     bool empty() const noexcept
     {
-        return !this->i_manager;
+        return !this->m_manager;
     }
 
-    void clear() & noexcept
+    void reset() & noexcept
     {
         if (!this->empty()) {
-          this->i_manager->Destructor(i_buffer.data());
+          this->m_manager->destruct(m_buffer.data());
           this->clear_manager();
         }
     }
@@ -441,18 +498,18 @@ class Any
     template<typename Tp>
     void set_manager() & noexcept
     {
-        this->i_manager = &n_Any_helper::template AnyTypeManager<Tp>::manager;
+        this->m_manager = &n_Any_helper::template AnyTypeManager<Tp>::manager;
     }
     void clear_manager() & noexcept
     {
-        this->i_manager = {};
+        this->m_manager = {};
     }
 
 
     template<typename Tp, typename ...Args>
     void construct(Args&& ...args) noexcept(noexcept(Tp(std::forward<Args>(args)...)))
     {
-        new (this->i_buffer.Get_buffer()) Tp(std::forward<Args>(args)...);
+        new (this->m_buffer.buffer()) Tp(std::forward<Args>(args)...);
     }
 
 
@@ -460,30 +517,18 @@ class Any
     template<typename Tp, typename ...Args>
     void unsafe_emplace(Args&& ...args)
     {
-        this->clear();
-        this->i_buffer.reset(ssizeof<Tp>());
+        this->reset();
+        this->m_buffer.reset(ssizeof<Tp>());
         this->construct<Tp>(std::forward<Args>(args)...);
         this->set_manager<Tp>();
     }
 
 
 
-    template<typename Tp>
-    Tp& unguarded_cast() & noexcept
-    {
-        return *static_cast<Tp*>(i_buffer.data());
-    }
-    template<typename Tp>
-    const Tp& unguarded_cast() const & noexcept
-    {
-        return *static_cast<const Tp*>(i_buffer.data());
-    }
 
 
-
-    buffer_type i_buffer;
-    size_t i_current_size;
-    manager_type i_manager;
+    buffer_type m_buffer;
+    manager_type m_manager;
 };
 const Any Any::null;
 
@@ -491,35 +536,17 @@ const Any Any::null;
 
 
 template<typename Tp>
-inline Tp Any_cast(Any &cont)
+inline Tp AnyCast(Any *any) noexcept
 {
-    return static_cast<Tp>(cont);
+    return any->ptrCast<remove_const_ptr_ref_t<Tp>>();
 }
 template<typename Tp>
-inline Tp Any_cast(const Any &cont)
+inline Tp AnyCast(const Any *any) noexcept
 {
-    return static_cast<Tp>(cont);
+    return any->ptrCast<remove_const_ptr_ref_t<Tp>>();
 }
-template<typename Tp>
-inline Tp Any_cast(Any &&cont)
-{
-    return static_cast<Tp>(std::move(cont));
-}
-template<typename Tp>
-inline Tp Any_cast(const Any &&cont)
-{
-    return static_cast<Tp>(std::move(cont));
-}
-template<typename Tp>
-inline Tp Any_cast(Any *cont) noexcept
-{
-    return cont->ptr_cast<remove_const_ptr_ref_t<Tp>>();
-}
-template<typename Tp>
-inline Tp Any_cast(const Any *cont) noexcept
-{
-    return cont->ptr_cast<remove_const_ptr_ref_t<Tp>>();
-}
+
+
 
 } // namespace Achibulup
 #endif // ACHIBULUP_ANY_H_INCLUDED

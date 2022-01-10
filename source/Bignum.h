@@ -9,6 +9,7 @@
 #include <cmath> //log2
 #include <string> //input
 #include <limits> //unsigned long long max
+#include <memory> //unique_ptr
 #include <cstring> //memset, memcpy
 #include <cstdint> //int types
 #include <iostream> //in-out put
@@ -20,7 +21,7 @@ namespace Achibulup{
 
 
 
-namespace n_Int_helper{
+namespace n_Int{
 
 constexpr int ten = 10;
 
@@ -28,7 +29,7 @@ constexpr int ten = 10;
 void throw_division_by_zero_exception()
 {
     throw std::domain_error("division by zero");
-};
+}
 void throw_unsigned_integer_underflow_exception()
 {
     throw std::underflow_error("unsigned integer underflow");
@@ -44,52 +45,43 @@ using pointer = base_type*;
 template<typename Tp>
 using isIntegral_t = EnableIf_t<std::is_integral<Tp>::value>*;
 
-
 class IntData
 {
   public:
-    using const_pointer = n_Int_helper::const_pointer;
-    using pointer = n_Int_helper::pointer;
+    using const_pointer = n_Int::const_pointer;
+    using pointer = n_Int::pointer;
 
-    IntData() noexcept : i_data(), capacity() {}
+    IntData() noexcept : m_data(), size() {}
     explicit IntData(size_type cap) 
-    : i_data(new_array(cap)), capacity(cap) {}
+    : m_data(newArray(cap)), size(cap) {}
 
     IntData(IntData &&mov) noexcept
-    : i_data(Move(mov.i_data)), capacity(Move(mov.capacity)) {}
+    : m_data(Move(mov.m_data)), size(Move(mov.size)) {}
     IntData& operator = (IntData &&mov) & noexcept
     {
         swap(*this, mov);
         return *this;
     }
 
-    IntData(const IntData &cpy) = delete;
-    IntData& operator = (const IntData&) & = delete;
-
-    ~IntData()
-    {
-        delete_array(this->i_data);
-    }
-
     friend void swap(IntData &a, IntData &b) noexcept
     {
-        IntData::swap(a, b);
+        doSwap(a, b);
     }
 
 
     base_type& operator[] (size_type i)
     {
-        return this->i_data[i];
+        return this->m_data[i];
     }
     base_type operator[] (size_type i) const
     {
-        return this->i_data[i];
+        return this->m_data[i];
     }
 
 
     const_pointer cbegin() const
     {
-        return this->i_data;
+        return this->m_data.get();
     }
     const_pointer begin() const
     {
@@ -97,96 +89,51 @@ class IntData
     }
     pointer begin()
     {
-        return this->i_data;
+        return this->m_data.get();
     }
 
 
     void reset(size_type new_cap)
     {
-        if(new_cap > this->capacity())
+        if(new_cap > this->size())
           *this = IntData(new_cap);
     }
+    void reset()
+    {
+        IntData tmp;
+        swap(tmp, *this);
+    }
 
 
   private:
-    static void swap(IntData &a, IntData &b) noexcept
+    static void doSwap(IntData &a, IntData &b) noexcept
     {
         using std::swap;
-        swap(a.i_data, b.i_data);
-        swap(a.capacity.value, b.capacity.value);
+        swap(a.m_data, b.m_data);
+        a.size.swap(b.size);
     }
 
 
-    static pointer new_array(size_type len)
+    static pointer newArray(size_type len)
     { 
-        return len ? new base_type[len] : pointer()/*nullptr*/;
-    }
-    static void delete_array(pointer ptr)
-    {
-        delete[] ptr;
+        return len ? new base_type[len] : pointer();
     }
 
 
-
-    ///i for implement
-    pointer i_data;
+    std::unique_ptr<base_type[]> m_data;
 
   public:
-    ReadOnlyProperty<size_type, IntData> capacity;
+    ReadOnlyProperty<size_type, IntData> size;
 
 };
 
-class bit_proxy
+template<typename Tp, typename Tp1>
+constexpr Tp1 ceilDiv(const Tp &lhs, const Tp1 &rhs)
 {
-  public:
-    bit_proxy(base_type &obj, int pos) noexcept 
-    : i_ptr(&obj), i_pos() {}
+    return (lhs + rhs - 1) / rhs;
+}
 
-    bit_proxy(const bit_proxy&) noexcept = default;
-
-    const bit_proxy& operator = (const bit_proxy &b) const noexcept
-    { 
-        return *this = static_cast<bool>(b);
-    }
-
-    const bit_proxy& operator = (bool b) const noexcept
-    {
-        *this->i_ptr &= ~this->mask(); 
-        return *this |= b;
-    }
-
-    operator bool() const noexcept
-    {
-        return *this->i_ptr & this->mask();
-    }
-
-    const bit_proxy& operator &= (bool b) const noexcept
-    {
-        *this->i_ptr &= ~this->mask() | this->mask(b);
-        return *this;
-    }
-    const bit_proxy& operator |= (bool b) const noexcept
-    {
-        *this->i_ptr |= this->mask(b);
-        return *this;
-    }
-    const bit_proxy& operator ^= (bool b) const noexcept
-    {
-        *this->i_ptr ^= this->mask(b);
-        return *this;
-    }
-
-  private:
-    pointer i_ptr;
-    int i_pos;
-
-    base_type mask(bool b = true) const noexcept
-    {
-        return static_cast<base_type>(b) << this->i_pos;
-    }
-};
-
-} //namespace n_Int_helper
+} //namespace n_Int
 
 struct uIntDivResult;
 
@@ -194,22 +141,22 @@ struct uIntDivResult;
 class uInt
 {
   public:
-    uInt() noexcept : i_data(), size(0)  {}
+    uInt() noexcept : m_data(), size(0)  {}
 
     ///when you want to reuse resources you might not want to implement assignment in term of constructor
-    uInt(std::uintmax_t val) : uInt()
-    { *this = val; }
+    uInt(std::uintmax_t val) : uInt() { *this = val; }
+
+    uInt(const uInt &cpy) : uInt(cpy.size(), 0) { *this = cpy; }
 
     uInt(uInt &&mov) noexcept 
-    : i_data(Move(mov.i_data)), size(Move(mov.size)) {}
-
-    uInt(const uInt &cpy) : uInt(cpy.size(), 0)
-    { *this = cpy; }
+    : m_data(Move(mov.m_data)), size(Move(mov.size)) {}
 
     uInt& operator = (std::uintmax_t val) &
     {
+        static constexpr int max_size 
+          = n_Int::ceilDiv(sizeof(std::uintmax_t) * CHAR_BIT, k_BaseBinDigit);
         if (val != 0)
-          this->reset(5);
+          this->reset(max_size);
         this->clear();
         while(val > 0){
           this->unsafe_push_back(val % k_Base);
@@ -218,14 +165,6 @@ class uInt
         return *this;
     }
 
-    uInt& operator = (uInt &&mov) & noexcept
-    {
-        if (this != &mov) {
-          this->clear();
-          if (mov) swap(*this, mov);
-        }
-        return *this;
-    }
     uInt& operator = (const uInt &cpy) &
     {
         if (this != &cpy) {
@@ -234,14 +173,22 @@ class uInt
         }
         return *this;
     }
+    uInt& operator = (uInt &&mov) & noexcept
+    {
+        if (this != &mov) {
+          this->clear();
+          if (mov) swap(*this, mov);
+        }
+        return *this;
+    }
 
     friend void swap(uInt &a, uInt &b) noexcept
     {
-        uInt::swap(a, b);
+        doSwap(a, b);
     }
     
     ///downcasts to smaller primitive integers
-    template<typename intg, n_Int_helper::isIntegral_t<intg> = nullptr>
+    template<typename intg, n_Int::isIntegral_t<intg> = nullptr>
     explicit operator intg() const noexcept
     {
         return down_cast(*this);
@@ -250,57 +197,6 @@ class uInt
     explicit operator bool() const
     {
         return this->size();
-    }
-
-    uInt& parse(string_view strv) &
-    {
-        const char *str = strv.data();
-        auto len = strv.size();
-        while(len > 0 && *str == '0')
-        { ++str; --len; }
-        if (len == 0) 
-        { this->clear(); return *this; }
-
-        size_type estimate_size = 
-         std::ceil((std::log2(n_Int_helper::ten) / k_BaseBinDigit + .00001) * len);
-        estimate_size += 2;
-        this->reset(estimate_size);
-        this->clear();
-
-        size_type start = (len - 1) % k_ioDecDigit + 1;
-        unsafe_add(*this, str_to_base(str, start), this);
-        while(start < len){
-          unsafe_small_mult(*this, k_ioUnit, this);
-          unsafe_add(*this, str_to_base(str + start, k_ioDecDigit), this);
-          start += k_ioDecDigit;
-        }
-        return *this;
-    }
-    uInt&& parse(string_view strv) &&
-    {
-        return std::move(this->parse(strv));
-    }
-
-
-    friend std::string to_string(uInt x)
-    {
-        if (!x) return "0";
-        std::string res;
-        while(x){
-          calc_type unit = unsafe_small_divide(x, k_ioUnit, &x);
-          if (x) 
-            for(int i = 0; i < k_ioDecDigit; ++i){
-              res.push_back('0' + unit % n_Int_helper::ten);
-              unit /= n_Int_helper::ten;
-            }
-          else
-            while(unit){
-              res.push_back('0' + unit % n_Int_helper::ten);
-              unit /= n_Int_helper::ten;
-            }
-        }
-        std::reverse(res.begin(), res.end());
-        return res;
     }
 
 
@@ -341,7 +237,7 @@ class uInt
 
     uInt& operator --() &
     {
-        if (!*this) n_Int_helper::throw_unsigned_integer_underflow_exception();
+        if (!*this) n_Int::throw_unsigned_integer_underflow_exception();
         for(size_type i = 0; i < this->size(); ++i) {
           if ((*this)[i] == 0)
             (*this)[i] = k_Base - 1;
@@ -485,24 +381,24 @@ class uInt
           return lhs ^ std::move(rhs);
         return rhs ^ std::move(lhs);
     }
-    friend uInt operator >> (const uInt &lhs, size_t rhs)
+    friend uInt operator >> (const uInt &lhs, int rhs)
     {
         uInt res(max_shr_size(lhs, rhs), 0);
         unsafe_shr(lhs, rhs, &res);
         return res;
     }
-    friend uInt operator >> (uInt &&lhs, size_t rhs)
+    friend uInt operator >> (uInt &&lhs, int rhs)
     {
         unsafe_shr(lhs, rhs, &lhs);
         return std::move(lhs);
     }
-    friend uInt operator << (const uInt &lhs, size_t rhs)
+    friend uInt operator << (const uInt &lhs, int rhs)
     {
         uInt res(max_shl_size(lhs, rhs), 0);
         unsafe_shl(lhs, rhs, &res);
         return res;
     }
-    friend uInt operator << (uInt &&lhs, size_t rhs)
+    friend uInt operator << (uInt &&lhs, int rhs)
     {
         if(lhs.capacity() < max_shl_size(lhs, rhs))
           return lhs << rhs;
@@ -541,14 +437,85 @@ class uInt
     { return *this = std::move(*this) ^ rhs; }
     uInt& operator ^= (uInt &&rhs) &
     { return *this = std::move(*this) ^ std::move(rhs); }
+    uInt& operator >>= (int rhs) &
+    { return *this = std::move(*this) >> rhs; }
+    uInt& operator <<= (int rhs) &
+    { return *this = std::move(*this) << rhs; }
+
+
+
+    uInt& parse(string_view strv) &
+    {
+        const char *str = strv.data();
+        size_type len = strv.size();
+        while(len > 0 && *str == '0')
+        { ++str; --len; }
+        if (len == 0) 
+        { this->clear(); return *this; }
+
+        size_type estimate_size = 
+         std::ceil((std::log2(n_Int::ten) / k_BaseBinDigit + .00001) * len);
+        estimate_size += 2;
+        this->reset(estimate_size);
+        this->clear();
+
+        size_type start = (len - 1) % k_ioDecDigit + 1;
+        unsafe_add(*this, str_to_base(str, start), this);
+        while(start < len){
+          unsafe_small_mult(*this, k_ioUnit, this);
+          unsafe_add(*this, str_to_base(str + start, k_ioDecDigit), this);
+          start += k_ioDecDigit;
+        }
+        return *this;
+    }
+    uInt&& parse(string_view strv) &&
+    {
+        return std::move(this->parse(strv));
+    }
+
+
+    friend std::string to_string(uInt x)
+    {
+        if (!x) return "0";
+        std::string res;
+        while(x){
+          calc_type unit = unsafe_small_divide(x, k_ioUnit, &x);
+          if (x) 
+            for(int i = 0; i < k_ioDecDigit; ++i){
+              res.push_back('0' + unit % n_Int::ten);
+              unit /= n_Int::ten;
+            }
+          else
+            while(unit){
+              res.push_back('0' + unit % n_Int::ten);
+              unit /= n_Int::ten;
+            }
+        }
+        std::reverse(res.begin(), res.end());
+        return res;
+    }
+
+    
+    friend std::istream& operator >> (std::istream &is, uInt &x) 
+    {
+        std::string input;
+        is >> input;
+        x.parse(input);
+        return is;
+    }
+
+    friend std::ostream& operator << (std::ostream &os, const uInt &x)
+    {
+        return os << to_string(x);
+    }
 
   private:
-    using size_type = n_Int_helper::size_type;
-    using base_type = n_Int_helper::base_type;
-    using calc_type = n_Int_helper::calc_type;
-    using wcalc_type = n_Int_helper::wcalc_type;
-    using const_pointer = n_Int_helper::IntData::const_pointer;
-    using pointer = n_Int_helper::IntData::pointer;
+    using size_type = n_Int::size_type;
+    using base_type = n_Int::base_type;
+    using calc_type = n_Int::calc_type;
+    using wcalc_type = n_Int::wcalc_type;
+    using const_pointer = n_Int::IntData::const_pointer;
+    using pointer = n_Int::IntData::pointer;
 
     static constexpr int k_BaseBinDigit = 30;
     static constexpr base_type k_Base = 1u << k_BaseBinDigit;
@@ -563,7 +530,7 @@ class uInt
     {
       public:
         using size_type = size_type;
-        using const_pointer = n_Int_helper::IntData::const_pointer;
+        using const_pointer = n_Int::IntData::const_pointer;
 
         SegView() = delete;
       
@@ -671,17 +638,17 @@ class uInt
     }
 
 
-    uInt(size_type cap, size_type s) : i_data(cap), size(s) {}
+    uInt(size_type cap, size_type s) : m_data(cap), size(s) {}
 
-    uInt(uInt &cpy, size_type cap) : i_data(cap), size(cpy.size()) 
+    uInt(uInt &cpy, size_type cap) : m_data(cap), size(cpy.size()) 
     {
         *this = cpy;
     }
 
-    static void swap(uInt &a, uInt &b) noexcept
+    static void doSwap(uInt &a, uInt &b) noexcept
     {
         using std::swap;
-        swap(a.i_data, b.i_data);
+        swap(a.m_data, b.m_data);
         swap(a.size.value, b.size.value);
     }
     
@@ -697,7 +664,7 @@ class uInt
     {
         calc_type res = 0;
         for(size_type i = 0; i < len; ++i)
-          res = res * n_Int_helper::ten + (str[i] - '0');
+          res = res * n_Int::ten + (str[i] - '0');
         return res;
     }
 
@@ -878,7 +845,7 @@ class uInt
     static void unsafe_subtract(SegView lhs, SegView rhs, uInt *res)
     {
         if (lhs.size() < rhs.size())
-          n_Int_helper::throw_unsigned_integer_underflow_exception();
+          n_Int::throw_unsigned_integer_underflow_exception();
         calc_type tmp = 0, carry = 0;
         for(size_type i = 0; i < lhs.size(); ++i) {
           tmp = k_Base + lhs[i] - carry;
@@ -888,7 +855,7 @@ class uInt
           (*res)[i] = tmp;
         }
         if (carry)
-          n_Int_helper::throw_unsigned_integer_underflow_exception();
+          n_Int::throw_unsigned_integer_underflow_exception();
         res->size = lhs.size();
         res->trim_zero();
     }
@@ -1068,11 +1035,11 @@ class uInt
 
     base_type& operator [] (size_type idx) &
     {
-        return this->i_data[idx];
+        return this->m_data[idx];
     }
     base_type operator [] (size_type idx) const &
     {
-        return this->i_data[idx];
+        return this->m_data[idx];
     }
 
     base_type back() const
@@ -1091,11 +1058,11 @@ class uInt
 
     pointer begin() &
     {
-        return this->i_data.begin();
+        return this->m_data.begin();
     }
     const_pointer cbegin() const &
     {
-        return this->i_data.cbegin();
+        return this->m_data.cbegin();
     }
     const_pointer begin() const &
     {
@@ -1122,7 +1089,7 @@ class uInt
     }
     void reset(size_type cap)
     {
-        this->i_data.reset(cap);
+        this->m_data.reset(cap);
         this->clear();
     }
     void reserve(size_type cap)
@@ -1132,12 +1099,12 @@ class uInt
     }
     size_type capacity() const
     {
-        return this->i_data.capacity();
+        return this->m_data.size();
     }
 
 
 
-    n_Int_helper::IntData i_data;
+    n_Int::IntData m_data;
     ReadOnlyProperty<size_type, uInt> size;
 };
 
@@ -1150,7 +1117,7 @@ struct uIntDivResult
 inline uInt operator / (const uInt &divident, const uInt &divisor)
 {
     if (divisor.size() == 0) 
-      n_Int_helper::throw_division_by_zero_exception();
+      n_Int::throw_division_by_zero_exception();
     if (divident < divisor) 
       return uInt();
     if (divisor.is_small_divisor())
@@ -1160,7 +1127,7 @@ inline uInt operator / (const uInt &divident, const uInt &divisor)
 inline uInt operator % (const uInt &divident, const uInt &divisor)
 {
     if (divisor.size() == 0) 
-      n_Int_helper::throw_division_by_zero_exception();
+      n_Int::throw_division_by_zero_exception();
     if (divident < divisor) 
       return divident;
     if (divisor.is_small_divisor())
@@ -1170,7 +1137,7 @@ inline uInt operator % (const uInt &divident, const uInt &divisor)
 inline uIntDivResult div(const uInt &divident, const uInt &divisor)
 {
     if (divisor.size() == 0) 
-      n_Int_helper::throw_division_by_zero_exception();
+      n_Int::throw_division_by_zero_exception();
     if (divident < divisor) 
       return uIntDivResult{uInt(), divident};
     if (divisor.is_small_divisor())
@@ -1205,25 +1172,9 @@ template<> uInt convert<uInt>(string_view str)
     return res;
 }
 
-template<typename t1, typename t2>
-std::basic_istream<t1, t2>& 
-operator >> (std::basic_istream<t1, t2> &is, uInt &x) 
-{
-    std::string input;
-    is >> input;
-    x.parse(input);
-    return is;
-}
-
-template<typename t1, typename t2>
-std::basic_ostream<t1, t2>& 
-operator << (std::basic_ostream<t1, t2> &os, const uInt &x)
-{
-    return os << to_string(x);
-}
 
 template<char ...cs>
-const uInt& operator "" _lll()
+const uInt& operator "" _ulll()
 {
     static constexpr char str[]{cs..., '\0'};
     static const uInt x = convert<uInt>(str);
@@ -1240,7 +1191,7 @@ class Int
   public:
     Int() noexcept = default;
 
-    template<typename intg, n_Int_helper::isIntegral_t<intg> = nullptr>
+    template<typename intg, n_Int::isIntegral_t<intg> = nullptr>
     Int(intg val) : Int()
     {
         *this = val;
@@ -1251,7 +1202,7 @@ class Int
     Int(Int&&) noexcept = default;
     Int(const Int&) = default;
 
-    template<typename intg, n_Int_helper::isIntegral_t<intg> = nullptr>
+    template<typename intg, n_Int::isIntegral_t<intg> = nullptr>
     Int& operator = (intg val) &
     {
         sign_type new_sign = positive;
@@ -1261,7 +1212,7 @@ class Int
         }
         if (val == 0) this->sign = zero;
         else {
-          this->i_abs = val;
+          this->m_abs = val;
           this->sign = new_sign;
         }
         return *this;
@@ -1270,17 +1221,16 @@ class Int
     Int& operator = (Int&&) & noexcept = default;
     Int& operator = (const Int&) & = default;
 
-    ///have to call member func because of friend-ing issue
     friend void swap(Int &a, Int &b) noexcept
     {
-        Int::swap(a, b);
+        doSwap(a, b);
     }
 
 
-    template<typename intg, n_Int_helper::isIntegral_t<intg> = nullptr>
+    template<typename intg, n_Int::isIntegral_t<intg> = nullptr>
     explicit operator intg() const noexcept
     {
-        return static_cast<intg>(this->i_abs) * this->sign;
+        return static_cast<intg>(this->m_abs) * this->sign;
     }
 
     explicit operator bool() const noexcept
@@ -1292,38 +1242,13 @@ class Int
     static constexpr sign_type zero = 0;
     static constexpr sign_type positive = 1;
     static constexpr sign_type negative = -positive;
+
     ReadOnlyProperty<sign_type, Int> sign;
 
 
-    Int& parse(string_view strv) &
-    {
-        const char *str = strv.data();
-        auto len = strv.size();
-        sign_type new_sign = positive;
-        const char* en = str + len;
-        if (*str == '-') {
-          new_sign = -new_sign;
-          ++str;
-        }
-        this->i_abs.parse(string_view(str, en - str));
-        if (!this->i_abs) this->sign = zero;
-        else this->sign = new_sign;
-        return *this;
-    }
-    Int&& parse(string_view strv) &&
-    {
-        return std::move(this->parse(strv));
-    }
-
-    friend std::string to_string(const Int &x)
-    { 
-        if (x.sign == negative) return '-' + to_string(x.i_abs);
-        return to_string(x.i_abs);
-    }
-
     friend bool operator == (const Int &lhs, const Int &rhs)
     {
-        return lhs.sign() == rhs.sign() && lhs.i_abs == rhs.i_abs;
+        return lhs.sign() == rhs.sign() && lhs.m_abs == rhs.m_abs;
     }
     friend bool operator != (const Int &lhs, const Int &rhs)
     {
@@ -1333,8 +1258,8 @@ class Int
     {
         if (&lhs == &rhs) return false;
         if (lhs.sign() != rhs.sign()) return lhs.sign() < rhs.sign();
-        if (lhs.sign == positive) return lhs.i_abs < rhs.i_abs;
-        if (lhs.sign == negative) return rhs.i_abs < lhs.i_abs;
+        if (lhs.sign == positive) return lhs.m_abs < rhs.m_abs;
+        if (lhs.sign == negative) return rhs.m_abs < lhs.m_abs;
         return false;
     }
     friend bool operator > (const Int &lhs, const Int &rhs)
@@ -1351,24 +1276,33 @@ class Int
     }
 
 
-    friend void negate(Int &x)
+    friend Int& negate(Int &x)
     {
-        x.negate();
+        x.doNegate();
+        return x;
     }
 
 
-    friend Int operator + (Int);
-    friend Int operator - (Int);
+
+    friend Int operator + (Int x)
+    {
+        return x;
+    }
+    friend Int operator - (Int x)
+    {
+        negate(x);
+        return x;
+    }
 
 
     Int& operator ++ () &
     {
         if (this->sign == negative) {
-          --this->i_abs;
-          if (!this->i_abs) 
+          --this->m_abs;
+          if (!this->m_abs) 
             this->sign = zero;
         }else {
-          ++this->i_abs;
+          ++this->m_abs;
           this->sign = positive;
         }
         return *this;
@@ -1382,11 +1316,11 @@ class Int
     Int& operator -- () &
     {
         if (this->sign == positive) {
-          --this->i_abs;
-          if (!this->i_abs) 
+          --this->m_abs;
+          if (!this->m_abs) 
             this->sign = zero;
         }else {
-          ++this->i_abs;
+          ++this->m_abs;
           this->sign = negative;
         }
         return *this;
@@ -1404,21 +1338,21 @@ class Int
     {
         if(lhs.sign() * rhs.sign() != negative)
           return Int{(lhs.sign() ? lhs.sign() : rhs.sign()), 
-                      lhs.i_abs + rhs.i_abs};
-        if (lhs.i_abs < rhs.i_abs)
-          return Int{rhs.sign(), rhs.i_abs - lhs.i_abs}; 
+                      lhs.m_abs + rhs.m_abs};
+        if (lhs.m_abs < rhs.m_abs)
+          return Int{rhs.sign(), rhs.m_abs - lhs.m_abs}; 
         else
-          return Int{lhs.sign(), lhs.i_abs - rhs.i_abs};
+          return Int{lhs.sign(), lhs.m_abs - rhs.m_abs};
     }
     friend Int operator + (const Int &lhs, Int &&rhs)
     {
         if(lhs.sign() * rhs.sign() != negative)
           return Int{(lhs.sign() ? lhs.sign() : rhs.sign()), 
-                      lhs.i_abs + std::move(rhs.i_abs)};
-        if (lhs.i_abs < rhs.i_abs)
-          return Int{rhs.sign(), std::move(rhs.i_abs) - lhs.i_abs}; 
+                      lhs.m_abs + std::move(rhs.m_abs)};
+        if (lhs.m_abs < rhs.m_abs)
+          return Int{rhs.sign(), std::move(rhs.m_abs) - lhs.m_abs}; 
         else
-          return Int{lhs.sign(), lhs.i_abs - std::move(rhs.i_abs)};
+          return Int{lhs.sign(), lhs.m_abs - std::move(rhs.m_abs)};
     }
     friend Int operator + (Int &&lhs, const Int &rhs)
     {
@@ -1428,22 +1362,22 @@ class Int
     {
         if(lhs.sign() * rhs.sign() != negative)
           return Int{(lhs.sign() ? lhs.sign() : rhs.sign()), 
-                      std::move(lhs.i_abs) + std::move(rhs.i_abs)};
-        if (lhs.i_abs < rhs.i_abs)
-          return Int{rhs.sign(), std::move(rhs.i_abs) - std::move(lhs.i_abs)}; 
+                      std::move(lhs.m_abs) + std::move(rhs.m_abs)};
+        if (lhs.m_abs < rhs.m_abs)
+          return Int{rhs.sign(), std::move(rhs.m_abs) - std::move(lhs.m_abs)}; 
         else
-          return Int{lhs.sign(), std::move(lhs.i_abs) - std::move(rhs.i_abs)};
+          return Int{lhs.sign(), std::move(lhs.m_abs) - std::move(rhs.m_abs)};
     }
 
     friend Int operator - (const Int &lhs, const Int &rhs)
     {
         if(lhs.sign() * -rhs.sign() != negative)
           return Int{(lhs.sign() ? +lhs.sign() : -rhs.sign()), 
-                      lhs.i_abs + rhs.i_abs};
-        if (lhs.i_abs < rhs.i_abs)
-          return Int{-rhs.sign(), rhs.i_abs - lhs.i_abs}; 
+                      lhs.m_abs + rhs.m_abs};
+        if (lhs.m_abs < rhs.m_abs)
+          return Int{-rhs.sign(), rhs.m_abs - lhs.m_abs}; 
         else
-          return Int{+lhs.sign(), lhs.i_abs - rhs.i_abs};
+          return Int{+lhs.sign(), lhs.m_abs - rhs.m_abs};
     }
     friend Int operator - (const Int &lhs, Int &&rhs)
     {
@@ -1460,50 +1394,84 @@ class Int
 
     friend Int operator * (const Int &lhs, const Int &rhs)
     {
-        return Int{lhs.sign() * rhs.sign(), lhs.i_abs * rhs.i_abs};
+        return Int{lhs.sign() * rhs.sign(), lhs.m_abs * rhs.m_abs};
     }
     friend Int operator / (const Int &lhs, const Int &rhs)
     {
-        return Int{lhs.sign() * rhs.sign(), lhs.i_abs / rhs.i_abs};
+        return Int{lhs.sign() * rhs.sign(), lhs.m_abs / rhs.m_abs};
     }
     friend Int operator % (const Int &lhs, const Int &rhs)
     {
-        return Int{lhs.sign() * rhs.sign(), lhs.i_abs % rhs.i_abs};
+        return Int{lhs.sign() * rhs.sign(), lhs.m_abs % rhs.m_abs};
     }
     friend IntDivResult div(const Int&, const Int&);
 
 
-  private:
-    Int(sign_type si, uInt b) noexcept : sign(si * !!b), i_abs(Move(b)) {}
-
-    
-    static void swap(Int &a, Int &b) noexcept
+    Int& parse(string_view strv) &
     {
-        using std::swap;
-        swap(a.sign.value, b.sign.value);
-        swap(a.i_abs, b.i_abs);
+        const char *str = strv.data();
+        auto len = strv.size();
+        sign_type new_sign = positive;
+        const char* en = str + len;
+        if (*str == '-') {
+          new_sign = -new_sign;
+          ++str;
+        }
+        this->m_abs.parse(string_view(str, en - str));
+        if (!this->m_abs) this->sign = zero;
+        else this->sign = new_sign;
+        return *this;
+    }
+    Int&& parse(string_view strv) &&
+    {
+        return std::move(this->parse(strv));
+    }
+
+    friend std::string to_string(const Int &x)
+    { 
+        std::ostringstream format;
+        format << x;
+        return format.str();
     }
 
 
-    void negate() &
+    friend std::istream& operator >> (std::istream &is, Int &x) 
+    {
+        std::string input;
+        is >> input;
+        x.parse(input);
+        return is;
+    }
+
+    friend std::ostream& operator << (std::ostream &os, const Int &x)
+    {
+        if (x.sign() == negative) os << '-';
+        os << x.m_abs;
+        return os;
+    }
+
+
+  private:
+    Int(sign_type si, uInt b) noexcept : sign(si * !!b), m_abs(Move(b)) {}
+
+    
+    static void doSwap(Int &a, Int &b) noexcept
+    {
+        using std::swap;
+        a.sign.swap(b.sign);
+        swap(a.m_abs, b.m_abs);
+    }
+
+
+    void doNegate() &
     {
         this->sign = -this->sign();
     }
 
 
-    uInt i_abs;
+    uInt m_abs;
 };
 
-
-inline Int operator + (Int x)
-{
-    return x;
-}
-inline Int operator - (Int x)
-{
-    negate(x);
-    return x;
-}
 
 struct IntDivResult
 {
@@ -1512,11 +1480,10 @@ struct IntDivResult
 
 IntDivResult div(const Int &lhs, const Int &rhs)
 {
-    auto res = div(lhs.i_abs, rhs.i_abs);
+    auto res = div(lhs.m_abs, rhs.m_abs);
     return {Int{lhs.sign() * rhs.sign(), std::move(res.quo)},
             Int{lhs.sign() * rhs.sign(), std::move(res.rem)}};
 }
-
 
 
 template<> Int convert<Int>(string_view str)
@@ -1526,21 +1493,13 @@ template<> Int convert<Int>(string_view str)
     return res;
 }
 
-template<typename t1, typename t2>
-std::basic_istream<t1, t2>& 
-operator >> (std::basic_istream<t1, t2> &is, Int &x) 
-{
-    std::string input;
-    is >> input;
-    x.parse(input);
-    return is;
-}
 
-template<typename t1, typename t2>
-std::basic_ostream<t1, t2>& 
-operator << (std::basic_ostream<t1, t2> &os, const Int &x)
+template<char ...cs>
+const Int& operator "" _lll()
 {
-    return os << to_string(x);
+    static constexpr char str[]{cs..., '\0'};
+    static const Int x = convert<Int>(str);
+    return x;
 }
 
 
@@ -1565,40 +1524,56 @@ operator << (std::basic_ostream<t1, t2> &os, const Int &x)
 
 
 #if ACHIBULUP__Cpp14_later
-struct uint128_t
+class uint128_t
 {
-    uint64_t sc, fi;
+  public:
     uint128_t() noexcept = default;
 
     template<typename Tp, typename = EnableIf_t<std::is_integral<Tp>::value>>
-    constexpr uint128_t(const Tp &val) : sc((val < 0) ? -val : val), fi((val < 0) ? ~0ull : 0) {}
-    constexpr uint128_t(uint64_t _sc, uint64_t _fi) : sc(_sc), fi(_fi) {}
-
-    constexpr uint128_t(const uint128_t&) = default;
-    constexpr uint128_t& operator = (const uint128_t&) & = default;
+    constexpr uint128_t(const Tp &val) : low((val < 0) ? -val : val), high((val < 0) ? -1 : 0) {}
+    constexpr uint128_t(uint64_t _sc, uint64_t _fi) : low(_sc), high(_fi) {}
 
     template<typename Tp, typename = EnableIf_t<std::is_integral<Tp>::value>>
     explicit constexpr operator Tp() const
     {
-        return sc;
+        return low;
     }
     explicit constexpr operator bool () const
     {
-        return fi || sc;
+        return high || low;
+    }
+
+    friend std::istream& operator >> (std::istream &is, uint128_t &x)
+    {
+        return x.extractFrom(is);
+    }
+    friend std::ostream& operator << (std::ostream &os, const uint128_t &x)
+    {
+        return x.insertTo(os);
     }
 
 
-    static constexpr uint64_t mask_second = (1ull << 32) - 1;
+    uint64_t low, high;
+
+    static constexpr uint64_t k_MaskLow = (1ull << 32) - 1;
+  private:
+    std::istream& extractFrom(std::istream&);
+    std::ostream& insertTo(std::ostream&) const;
+
+
+
+
+
 };
 inline constexpr bool operator == (const uint128_t &l, const uint128_t &r)
 {
-    return l.fi == r.fi && l.sc == r.sc;
+    return l.high == r.high && l.low == r.low;
 }
 inline constexpr bool operator != (const uint128_t &l, const uint128_t &r)
 {   return !(l == r); }
 inline constexpr bool operator < (const uint128_t &l, const uint128_t &r)
 {
-    return l.fi < r.fi || (l.fi == r.fi && l.sc < r.sc);
+    return l.high < r.high || (l.high == r.high && l.low < r.low);
 }
 inline constexpr bool operator > (const uint128_t &l, const uint128_t &r)
 {   return r < l; }
@@ -1609,32 +1584,32 @@ inline constexpr bool operator >= (const uint128_t &l, const uint128_t &r)
 
 inline constexpr uint128_t operator & (const uint128_t &l, const uint128_t &r)
 {
-    return {l.sc & r.sc, l.fi & r.fi};
+    return {l.low & r.low, l.high & r.high};
 }
 inline constexpr uint128_t operator | (const uint128_t &l, const uint128_t &r)
 {
-    return {l.sc | r.sc, l.fi | r.fi};
+    return {l.low | r.low, l.high | r.high};
 }
 inline constexpr uint128_t operator ^ (const uint128_t &l, const uint128_t &r)
 {
-    return {l.sc ^ r.sc, l.fi ^ r.fi};
+    return {l.low ^ r.low, l.high ^ r.high};
 }
 
 inline constexpr uint128_t operator << (const uint128_t &x, const uint128_t &sh)
 {
-    return (!sh.fi && sh.sc < 64) ?
-    uint128_t{x.sc << sh.sc, (x.fi << sh.sc) ^ (x.sc >> (64 - sh.sc))}
-  : uint128_t{0, x.sc << (sh.sc - 64)};
+    return (!sh.high && sh.low < 64) ?
+    uint128_t{x.low << sh.low, (x.high << sh.low) ^ (x.low >> (64 - sh.low))}
+  : uint128_t{0, x.low << (sh.low - 64)};
 }
 inline constexpr uint128_t operator >> (const uint128_t &x, const uint128_t &sh)
 {
-    return (!sh.fi && sh.sc < 64) ?
-    uint128_t{(x.sc >> sh.sc) ^ (x.fi << (64 - sh.sc)), x.fi >> sh.sc}
-  : uint128_t{x.fi >> (sh.sc - 64), 0};
+    return (!sh.high && sh.low < 64) ?
+    uint128_t{(x.low >> sh.low) ^ (x.high << (64 - sh.low)), x.high >> sh.low}
+  : uint128_t{x.high >> (sh.low - 64), 0};
 }
 inline constexpr uint128_t operator ~ (const uint128_t &x)
 {
-    return uint128_t{~x.sc, ~x.fi};
+    return uint128_t{~x.low, ~x.high};
 }
 
 inline constexpr uint128_t& operator &= (uint128_t &x, const uint128_t &v)
@@ -1654,7 +1629,7 @@ inline constexpr int count_leading_zero(const uint64_t &x)
 }
 inline constexpr int count_leading_zero(const uint128_t &x)
 {
-    return x.fi ? count_leading_zero(x.fi) : (64 + count_leading_zero(x.sc));
+    return x.high ? count_leading_zero(x.high) : (64 + count_leading_zero(x.low));
 }
 
 
@@ -1664,13 +1639,13 @@ inline constexpr uint128_t operator + (uint128_t x)
 }
 inline constexpr uint128_t operator - (const uint128_t &x)
 {
-    return {~x.sc + 1, ~x.fi + !x.sc};
+    return {~x.low + 1, ~x.high + !x.low};
 }
 
 inline constexpr uint128_t& operator ++(uint128_t &x)
 {
-    ++x.sc;
-    x.fi += !x.sc;
+    ++x.low;
+    x.high += !x.low;
     return x;
 }
 inline constexpr uint128_t operator ++(uint128_t &x, int)
@@ -1681,8 +1656,8 @@ inline constexpr uint128_t operator ++(uint128_t &x, int)
 }
 inline constexpr uint128_t& operator --(uint128_t &x)
 {
-    --x.sc;
-    x.fi -= !~x.sc;
+    --x.low;
+    x.high -= !~x.low;
     return x;
 }
 inline constexpr uint128_t operator --(uint128_t &x, int)
@@ -1694,11 +1669,11 @@ inline constexpr uint128_t operator --(uint128_t &x, int)
 
 inline constexpr uint128_t operator + (const uint128_t &l, const uint128_t &r)
 {
-    return {l.sc + r.sc, l.fi + r.fi + (l.sc > ~r.sc)};
+    return {l.low + r.low, l.high + r.high + (l.low > ~r.low)};
 }
 inline constexpr uint128_t operator - (const uint128_t &l, const uint128_t &r)
 {
-    return {l.sc - r.sc, l.fi - r.fi - (l.sc < r.sc)};
+    return {l.low - r.low, l.high - r.high - (l.low < r.low)};
 }
 
 inline constexpr uint128_t& operator += (uint128_t &x, const uint128_t &d)
@@ -1709,28 +1684,28 @@ inline constexpr uint128_t& operator -= (uint128_t &x, const uint128_t &d)
 
 inline constexpr uint128_t operator * (const uint128_t &l, const uint128_t &r)
 {
-    uint128_t res{static_cast<uint32_t>(l.sc) * (r.sc & uint128_t::mask_second),
-      l.fi * r.sc + l.sc * r.fi + static_cast<uint32_t>(l.sc >> 32) * (r.sc >> 32)};
-    uint64_t v1 = static_cast<uint32_t>(l.sc) * (r.sc >> 32);
-    uint64_t v2 = static_cast<uint32_t>(r.sc) * (l.sc >> 32);
-    res.fi += (v1 >> 32) + (v2 >> 32);
-    v1 = (res.sc >> 32) + static_cast<uint32_t>(v1) + static_cast<uint32_t>(v2);
-    res.fi += v1 >> 32;
-    res.sc = (res.sc & uint128_t::mask_second) + ((v1 & uint128_t::mask_second) << 32);
+    uint128_t res{static_cast<uint32_t>(l.low) * (r.low & uint128_t::k_MaskLow),
+      l.high * r.low + l.low * r.high + static_cast<uint32_t>(l.low >> 32) * (r.low >> 32)};
+    uint64_t v1 = static_cast<uint32_t>(l.low) * (r.low >> 32);
+    uint64_t v2 = static_cast<uint32_t>(r.low) * (l.low >> 32);
+    res.high += (v1 >> 32) + (v2 >> 32);
+    v1 = (res.low >> 32) + static_cast<uint32_t>(v1) + static_cast<uint32_t>(v2);
+    res.high += v1 >> 32;
+    res.low = (res.low & uint128_t::k_MaskLow) + ((v1 & uint128_t::k_MaskLow) << 32);
     return res;
 }
 inline constexpr uint128_t operator / (uint128_t l, uint128_t r)
 {
     uint128_t res{};
     if (l < r);
-    else if (!l.fi) {
-      if (!r.fi) res.sc = l.sc / r.sc;
+    else if (!l.high) {
+      if (!r.high) res.low = l.low / r.low;
     }
-    else if (!r.fi && r.sc < (1ull << 32)) {
-      uint32_t div = static_cast<uint32_t>(r.sc);
-      res.fi = l.fi / div;
-      unsigned long long temp = (static_cast<uint64_t>(l.fi % div) << 32) + (l.sc >> 32);
-      res.sc = ((temp / div) << 32) + ((static_cast<uint64_t>(temp % div) << 32) + (l.sc & uint128_t::mask_second)) / div;
+    else if (!r.high && r.low < (1ull << 32)) {
+      uint32_t div = static_cast<uint32_t>(r.low);
+      res.high = l.high / div;
+      unsigned long long temp = (static_cast<uint64_t>(l.high % div) << 32) + (l.low >> 32);
+      res.low = ((temp / div) << 32) + ((static_cast<uint64_t>(temp % div) << 32) + (l.low & uint128_t::k_MaskLow)) / div;
     }
     else {
       unsigned shift = count_leading_zero(r);
@@ -1739,7 +1714,7 @@ inline constexpr uint128_t operator / (uint128_t l, uint128_t r)
         unsigned shift2 = shift - 64;
         do{
           if (l >= r) {
-            res.fi |= (1ull << shift2);
+            res.high |= (1ull << shift2);
             l -= r;
           }
           r >>= 1;
@@ -1748,7 +1723,7 @@ inline constexpr uint128_t operator / (uint128_t l, uint128_t r)
       }
       do{
         if (l >= r) {
-          res.fi |= (1ull << shift);
+          res.high |= (1ull << shift);
           l -= r;
         }
         r >>= 1;
@@ -1760,10 +1735,10 @@ inline constexpr uint128_t operator % (uint128_t l, uint128_t r)
 {
     uint128_t res{};
     if (l < r) res = l;
-    else if (!l.fi) res.sc = l.sc % r.sc;
-    else if (r.sc < (1ull << 32)) {
-      uint32_t div = static_cast<uint32_t>(r.sc);
-      res.sc = ((((((l.fi % div) << 32) + (l.sc >> 32)) % div) << 32) + (l.sc & uint128_t::mask_second)) % div;
+    else if (!l.high) res.low = l.low % r.low;
+    else if (r.low < (1ull << 32)) {
+      uint32_t div = static_cast<uint32_t>(r.low);
+      res.low = ((((((l.high % div) << 32) + (l.low >> 32)) % div) << 32) + (l.low & uint128_t::k_MaskLow)) % div;
     }
     else {
       unsigned shift = count_leading_zero(r);
@@ -1789,7 +1764,7 @@ inline constexpr uint128_t& operator %= (uint128_t &x, const uint128_t &d)
 template<typename Tp, typename = EnableIf_t<std::is_integral<Tp>::value>>
 inline constexpr bool operator == (const uint128_t &l, Tp r)
 {
-    return !l.fi && l.sc == r;
+    return !l.high && l.low == r;
 }
 template<typename Tp, typename = EnableIf_t<std::is_integral<Tp>::value>>
 inline constexpr bool operator == (Tp l, const uint128_t &r)
@@ -1803,12 +1778,12 @@ inline constexpr bool operator != (Tp l, const uint128_t &r)
 template<typename Tp, typename = EnableIf_t<std::is_integral<Tp>::value>>
 inline constexpr bool operator < (const uint128_t &l, Tp r)
 {
-    return !l.fi && l.sc < r;
+    return !l.high && l.low < r;
 }
 template<typename Tp, typename = EnableIf_t<std::is_integral<Tp>::value>>
 inline constexpr bool operator < (Tp l, const uint128_t &r)
 {
-    return r.fi || l < r.sc;
+    return r.high || l < r.low;
 }
 template<typename Tp, typename = EnableIf_t<std::is_integral<Tp>::value>>
 inline constexpr bool operator > (const uint128_t &l, Tp r)
@@ -1834,17 +1809,17 @@ inline constexpr bool operator >= (Tp l, const uint128_t &r)
 template<typename Tp, typename = EnableIf_t<std::is_integral<Tp>::value>>
 inline constexpr Tp operator << (Tp x, const uint128_t &sh)
 { 
-    return sh.fi ? (x << (64 + !sh.fi)) : (x << sh.sc);
+    return sh.high ? (x << (64 + !sh.high)) : (x << sh.low);
 }
 template<typename Tp, typename = EnableIf_t<std::is_integral<Tp>::value>>
 inline constexpr Tp operator >> (Tp x, const uint128_t &sh)
 { 
-    return sh.fi ? (x >> (64 + !sh.fi)) : (x >> sh.sc);
+    return sh.high ? (x >> (64 + !sh.high)) : (x >> sh.low);
 }
 template<typename Tp, typename = EnableIf_t<std::is_integral<Tp>::value>>
 inline constexpr Tp& operator &= (Tp &x, const uint128_t &v)
 { 
-    return x = x & v.sc;
+    return x = x & v.low;
 }
 template<typename Tp, typename = EnableIf_t<std::is_integral<Tp>::value>>
 inline constexpr Tp& operator <<= (Tp &x, const uint128_t &sh)
@@ -1859,44 +1834,47 @@ inline constexpr Tp& operator >>= (Tp &x, const uint128_t &sh)
 template<typename Tp, typename = EnableIf_t<std::is_integral<Tp>::value>>
 inline constexpr Tp& operator /= (Tp &x, const uint128_t &v)
 { 
-    return (v.fi) ? (x = 0) : (x /= v.sc);
+    return (v.high) ? (x = 0) : (x /= v.low);
 }
 template<typename Tp, typename = EnableIf_t<std::is_integral<Tp>::value>>
 inline constexpr Tp& operator %= (Tp &x, const uint128_t &v)
 { 
-    return (v.fi) ? x : (x %= v.sc);
+    return (v.high) ? x : (x %= v.low);
 }
 
 
-
-
-
-inline std::istream& operator >> (std::istream &is, uint128_t &x)
+std::istream& uint128_t::extractFrom(std::istream &is)
 {
     std::string istr;
-    x = {};
     is >> istr;
+    uint128_t &x = *this;
+    x = {};
     uint64_t temp1, temp2;
     for(std::string::size_type i = 0, len = istr.size(); i < len; ++i) {
-      temp1 = (x.sc & uint128_t::mask_second) * n_Int_helper::ten;
-      temp2 = (temp1 >> 32) + ((x.sc >> 32) * n_Int_helper::ten);
-      x.sc = (temp1 & uint128_t::mask_second) + (temp2 << 32);
-      x.fi = x.fi * n_Int_helper::ten + (temp2 >> 32);
-      x.sc += istr[i] - '0';
+      temp1 = (x.low & uint128_t::k_MaskLow) * n_Int::ten;
+      temp2 = (temp1 >> 32) + ((x.low >> 32) * n_Int::ten);
+      x.low = (temp1 & uint128_t::k_MaskLow) + (temp2 << 32);
+      x.high = x.high * n_Int::ten + (temp2 >> 32);
+      x.low += istr[i] - '0';
     }
     return is;
 }
-inline std::ostream& operator << (std::ostream &os, uint128_t x)
+
+std::ostream& uint128_t::insertTo(std::ostream &os) const
 {
+    uint128_t x = *this;
     char ostr[40];
     if (!x) return os << '0';
     int first = 40;
     while(x) {
-      ostr[--first] = int(x % n_Int_helper::ten) + '0';
-      x /= n_Int_helper::ten;
+      ostr[--first] = int(x % n_Int::ten) + '0';
+      x /= n_Int::ten;
     }
-    return os << (ostr + first);
+    os << (ostr + first);
+    return os;
 }
+
+
 #endif // __cplusplus
 } //namespace Achibulup
 #endif //BIGNUM_H_INCLUDED

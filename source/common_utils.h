@@ -15,6 +15,7 @@
 
 #include <new>
 #include <string>
+#include <cstring>
 #include <cstdint>
 #include <utility>
 #include <sstream>
@@ -115,30 +116,30 @@ MyClass(MyClass &&other)
 */
 
 template<typename Tp, typename = EnableIf_t<std::is_trivial<Tp>::value>>
-inline ACHIBULUP__constexpr_fun14 Tp Move(Tp &var) noexcept
+inline ACHIBULUP__constexpr_fun14 Tp Move(Tp &src) noexcept
 {
-    Tp res = var;
-    var = Tp();
+    Tp res = src;
+    src = Tp();
     return res;
 }
 template<typename Tp, typename = EnableIf_t<!std::is_trivial<Tp>::value>>
-inline constexpr Tp&& Move(Tp &var) noexcept 
+inline constexpr Tp&& Move(Tp &src) noexcept 
 {
-    return std::move(var);
+    return std::move(src);
 }
 
 template<typename Tp, typename = EnableIf_t<std::is_trivial<Tp>::value>>
-inline ACHIBULUP__constexpr_fun14 void Move_assign(Tp &var, Tp &val) 
-        noexcept(noexcept(var = std::move(val)))
+inline ACHIBULUP__constexpr_fun14 void Move_assign(Tp &dest, Tp &src) 
+        noexcept(noexcept(dest = std::move(src)))
 {
-    var = val;
-    val = {};
+    dest = src;
+    src = {};
 }
 template<typename Tp, typename = EnableIf_t<!std::is_trivial<Tp>::value>, typename = void>
-inline ACHIBULUP__constexpr_fun14 void Move_assign(Tp &var, Tp &val) 
-        noexcept(noexcept(var = std::move(val)))
+inline ACHIBULUP__constexpr_fun14 void Move_assign(Tp &dest, Tp &src) 
+        noexcept(noexcept(dest = std::move(src)))
 {
-    var = std::move(val);
+    dest = std::move(src);
 }
 
 
@@ -146,6 +147,24 @@ inline ACHIBULUP__constexpr_fun14 void Move_assign(Tp &var, Tp &val)
 
 
 /// string utilities
+// template<typename ostr>
+// ostr&& insert(ostr &&os, const std::string &s)
+// {
+//     os << s;
+//     return std::forward<ostr>(os);
+// }
+// template<typename ostr>
+// ostr&& insert(ostr &&os, const char *s)
+// {
+//     os << s;
+//     return std::forward<ostr>(os);
+// }
+// template<typename ostr>
+// ostr&& insert(ostr &&os, char c)
+// {
+//     os << c;
+//     return std::forward<ostr>(os);
+// }
 
 
 #if ACHIBULUP__Cpp17_later
@@ -165,9 +184,10 @@ class string_view
     : i_ptr(p), i_len(ln) {}
     constexpr string_view(const char *b, const char *e) noexcept
     : i_ptr(b), i_len(e - b) {}
-    template<size_t Nm>
-    constexpr string_view(const char (&str)[Nm]) noexcept
-    : i_ptr(str), i_len(Nm - 1) {}
+    constexpr string_view(const char *str) noexcept
+    : i_ptr(str), i_len(strlen(str)) {}
+    explicit constexpr string_view(const char &c) noexcept
+    : i_ptr(&c), i_len(c != 0) {}
     string_view(const std::string &str) 
     : i_ptr(str.c_str()), i_len(str.size()) {}
 
@@ -207,20 +227,20 @@ class string_view
         return std::string(cbegin(), cend());
     }
 
+    friend std::ostream& operator << (std::ostream &os, string_view s)
+    {
+        for(char c : s)
+          os << c;
+        return os;
+    }
+
     private:
     const_iterator i_ptr;
     size_type i_len;
 };
-template <typename t1, typename t2>
-std::basic_ostream<t1, t2>& 
-operator << (std::basic_ostream<t1, t2> &os, string_view s)
-{
-    for(char c : s)
-      os << c;
-    return os;
-}
 using wstring_view = const std::wstring&;
 #endif
+
 
 
 using std::to_string;
@@ -230,29 +250,19 @@ std::string to_string(Tp &&x)
 {
     return std::forward<Tp>(x);
 }
-template<typename Tp>
-void insert_helper(std::ostringstream &ostr, const Tp &val, std::true_type)
-{
-    ostr << string_view(val);
-}
-template<typename Tp>
-void insert_helper(std::ostringstream &ostr, const Tp &val, std::false_type)
-{
-    ostr << val;
-}
-void string_format_helper(std::ostringstream& result) {}
+void stringFormatHelper(std::ostringstream& result) {}
 template<typename Tp, typename ...Args>
-void string_format_helper(std::ostringstream& result, 
+void stringFormatHelper(std::ostringstream& result, 
                           const Tp &first, const Args& ...args)
 {
-    insert_helper(result, first, std::is_convertible<const Tp&, string_view>());
-    string_format_helper(result, args...);
+    result << first;
+    stringFormatHelper(result, args...);
 }
 template<typename ...Args>
-std::string string_format(const Args& ...args)
+std::string stringFormat(const Args& ...args)
 {
     std::ostringstream result;
-    string_format_helper(result, args...);
+    stringFormatHelper(result, args...);
     return result.str();
 }
 
@@ -353,6 +363,13 @@ convert<unsigned long long>(string_view str)
 #endif
 
 
+namespace n_Utils
+{
+    template<typename Tp>
+    struct is_basic 
+    : std::integral_constant<bool, std::is_scalar<Tp>::value> {};
+    template<> struct is_basic<std::string> : std::true_type {};
+}
 
 /** 
  * Simulating a C#-like read-only property
@@ -370,39 +387,60 @@ convert<unsigned long long>(string_view str)
       ReadOnlyProperty<int, Container> int_property;
   }
 */
-template<typename Type, class Container
-    , typename = EnableIf_t<std::is_arithmetic<Type>::value 
-                         || std::is_pointer<Type>::value>>
+template<typename Type, class Container, 
+    typename = EnableIf_t<n_Utils::is_basic<Type>::value>>
 class ReadOnlyProperty
 {
   private:
     constexpr ReadOnlyProperty() noexcept : value() {}
-    constexpr ReadOnlyProperty(Type val) noexcept : value(val) {}
+    constexpr ReadOnlyProperty(Type value) noexcept : value(value) {}
 
     constexpr ReadOnlyProperty(const ReadOnlyProperty&) noexcept = default;
-    ACHIBULUP__constexpr_fun14  
-    ReadOnlyProperty(ReadOnlyProperty &&mov) noexcept : value(Move(mov.value)) {}
 
     ACHIBULUP__constexpr_fun14 
     ReadOnlyProperty& operator = (const ReadOnlyProperty &) & noexcept = default;
-    ACHIBULUP__constexpr_fun14 
-    ReadOnlyProperty& operator = (ReadOnlyProperty &&mov) & noexcept
-    {
-        Move_assign(this->value, mov.value);
-        return *this;
-    }
 
     ACHIBULUP__constexpr_fun14
-    ReadOnlyProperty& operator = (Type val) & noexcept
+    void swap(ReadOnlyProperty &b) noexcept
     {
-        this->value = val;
-        return *this;
+        std::swap(this->value, b.value);
     }
 
-    ACHIBULUP__constexpr_fun14
-    static void swap(ReadOnlyProperty &a, ReadOnlyProperty &b) noexcept
+    friend ACHIBULUP__constexpr_fun14 Type Move(ReadOnlyProperty &src) noexcept
     {
-        std::swap(a.value, b.value);
+        Type res = src();
+        src = {};
+        return res;
+    }
+    friend ACHIBULUP__constexpr_fun14 Type Move(ReadOnlyProperty &&src) noexcept
+    {
+        return Move(src);
+    }
+
+
+  public:
+    constexpr Type operator () () const noexcept
+    {
+        return this->value;
+    }
+
+    constexpr operator Type () const noexcept
+    {
+        return (*this)();
+    }
+
+    constexpr Type operator -> () const noexcept
+    {
+        return (*this)();
+    }
+
+
+  private:
+    ACHIBULUP__constexpr_fun14
+    ReadOnlyProperty& operator = (Type value) & noexcept
+    {
+        this->value = value;
+        return *this;
     }
 
     ACHIBULUP__constexpr_fun14 
@@ -428,83 +466,241 @@ class ReadOnlyProperty
         return this->value--;
     }
     ACHIBULUP__constexpr_fun14 
-    ReadOnlyProperty& operator += (Type v) & noexcept
+    ReadOnlyProperty& operator += (Type value) & noexcept
     {
-        this->value += v;
+        this->value += value;
         return *this;
     }
     ACHIBULUP__constexpr_fun14 
-    ReadOnlyProperty& operator -= (Type v) & noexcept
+    ReadOnlyProperty& operator -= (Type value) & noexcept
     {
-        this->value -= v;
+        this->value -= value;
+        return *this;
+    }
+    ACHIBULUP__constexpr_fun14 
+    ReadOnlyProperty& operator *= (Type value) & noexcept
+    {
+        this->value *= value;
+        return *this;
+    }
+    ACHIBULUP__constexpr_fun14 
+    ReadOnlyProperty& operator /= (Type value) & noexcept
+    {
+        this->value /= value;
+        return *this;
+    }
+    ACHIBULUP__constexpr_fun14 
+    ReadOnlyProperty& operator %= (Type value) & noexcept
+    {
+        this->value %= value;
+        return *this;
+    }
+    ACHIBULUP__constexpr_fun14 
+    ReadOnlyProperty& operator &= (Type value) & noexcept
+    {
+        this->value &= value;
+        return *this;
+    }
+    ACHIBULUP__constexpr_fun14 
+    ReadOnlyProperty& operator |= (Type value) & noexcept
+    {
+        this->value |= value;
+        return *this;
+    }
+    ACHIBULUP__constexpr_fun14 
+    ReadOnlyProperty& operator ^= (Type value) & noexcept
+    {
+        this->value ^= value;
+        return *this;
+    }
+    ACHIBULUP__constexpr_fun14 
+    ReadOnlyProperty& operator >>= (Type value) & noexcept
+    {
+        this->value >>= value;
+        return *this;
+    }
+    ACHIBULUP__constexpr_fun14 
+    ReadOnlyProperty& operator <<= (Type value) & noexcept
+    {
+        this->value <<= value;
         return *this;
     }
 
-  public:
-    constexpr operator Type() const noexcept
-    {
-        return (*this)();
-    }
-
-    constexpr Type operator () () const noexcept
-    {
-        return value;
-    }
-
-  private:
     Type value;
 
     friend Container;
 };
 
 
-template<typename Type, class Container
-    , typename = EnableIf_t<std::is_arithmetic<Type>::value 
-                         || std::is_pointer<Type>::value>>
+template<class Container>
+class ReadOnlyProperty<std::string, Container>
+{
+  private:
+    constexpr ReadOnlyProperty() noexcept : value() {}
+    ReadOnlyProperty(std::string str) noexcept : value(std::move(str)) {}
+
+    ReadOnlyProperty(const ReadOnlyProperty&) = default;
+    ReadOnlyProperty(ReadOnlyProperty&&) noexcept = default;
+
+    ReadOnlyProperty& operator = (const ReadOnlyProperty &) & = default;
+    ReadOnlyProperty& operator = (ReadOnlyProperty &&) & noexcept = default;
+
+    void swap(ReadOnlyProperty &b) noexcept
+    {
+        using std::swap;
+        swap(this->value, b.value);
+    }
+
+  public:
+    std::string operator () () const &
+    {
+        return this->value;
+    }
+    std::string operator () () && noexcept
+    {
+        return std::move(this->value);
+    }
+
+    constexpr operator const char* () const noexcept
+    {
+        return this->value.c_str();
+    }
+
+    constexpr const std::string* operator -> () const noexcept
+    {
+        return &(this->value);
+    }
+
+    friend std::string to_string(const ReadOnlyProperty &p)
+    {
+        return p();
+    }
+    friend std::string to_string(ReadOnlyProperty &&p)
+    {
+        return std::move(p)();
+    }
+
+    operator string_view () const noexcept
+    {
+        return {this->value.data(), this->value.size()};
+    } 
+
+    friend std::string operator + (const ReadOnlyProperty &lhs, 
+                                   const ReadOnlyProperty &rhs)
+    {
+        return lhs.value + rhs.value;
+    }
+
+    template<typename Str>
+    friend std::string operator + (const ReadOnlyProperty &lhs, const Str &rhs)
+    {
+        return lhs.value + std::forward<Str>(rhs);
+    }
+    template<typename Str>
+    friend std::string operator + (const Str &lhs, const ReadOnlyProperty &rhs)
+    {
+        return std::forward<Str>(lhs) + rhs.value;
+    }
+
+  private:
+    template<typename Str>
+    auto operator = (Str &&rhs) & 
+    -> decltype(std::declval<std::string&>() = std::declval<Str>(), *this)
+    {
+        this->value = std::forward<Str>(rhs);
+        return *this;
+    }
+    ReadOnlyProperty& operator = (std::string &&str) & noexcept
+    {
+        this->value = std::move(str);
+        return *this;
+    }
+
+    template<typename Str>
+    ReadOnlyProperty& operator += (Str &&rhs) 
+    {
+        this->value += std::forward<Str>(rhs);
+        return *this;
+    }
+
+    std::string& operator * () noexcept
+    {
+        return this->value;
+    }
+    const std::string& operator * () const noexcept
+    {
+        return this->value;
+    }
+
+    template<typename Functor>
+    void visit(Functor &&functor)
+    {
+        functor(this->value);
+    }
+    template<typename Functor>
+    void visit(Functor &&functor) const
+    {
+        functor(this->value);
+    }
+
+    std::string value;
+
+    friend Container;
+};
+
+
+template<typename Type, class Container, 
+    typename = EnableIf_t<n_Utils::is_basic<Type>::value>>
 class AutoProperty
 {
   private:
     constexpr AutoProperty() noexcept : value() {}
-    constexpr AutoProperty(Type val) noexcept : value(val) {}
+    constexpr AutoProperty(Type value) noexcept : value(value) {}
 
-    ACHIBULUP__constexpr_fun14  
-    AutoProperty(AutoProperty &&mov) noexcept : value(Move(mov.value)) {}
-    constexpr AutoProperty(const AutoProperty&) noexcept = default;
-
-    ACHIBULUP__constexpr_fun14 
-    AutoProperty& operator = (AutoProperty &&mov) & noexcept
-    {
-        Move_assign(this->value, mov.value);
-        return *this;
-    }
+    constexpr AutoProperty(const AutoProperty &) noexcept = default;
 
   public:  
     ACHIBULUP__constexpr_fun14 
     AutoProperty& operator = (const AutoProperty &) & noexcept = default;
+
+    ACHIBULUP__constexpr_fun14
+    friend void swap(AutoProperty &a, AutoProperty &b) noexcept
+    {
+        a.swap(b);
+    }
+
+    friend ACHIBULUP__constexpr_fun14 Type Move(AutoProperty &src) noexcept
+    {
+        Type res = src();
+        src = {};
+        return res;
+    }
+    friend ACHIBULUP__constexpr_fun14 Type Move(AutoProperty &&src) noexcept
+    {
+        return Move(src);
+    }
+    
+    constexpr Type operator () () const noexcept
+    {
+        return this->value;
+    }
 
     constexpr operator Type() const noexcept
     {
         return (*this)();
     }
 
-    constexpr Type operator () () const noexcept
+    constexpr Type operator -> () const noexcept
     {
-        return value;
+        return (*this)();
     }
 
     ACHIBULUP__constexpr_fun14
-    AutoProperty& operator = (Type val) & noexcept
+    AutoProperty& operator = (Type value) & noexcept
     {
-        this->value = val;
+        this->value = value;
         return *this;
     }
-
-    ACHIBULUP__constexpr_fun14
-    friend void swap(AutoProperty &a, AutoProperty &b) noexcept
-    {
-        AutoProperty::swap(a, b);
-    }
-
     
     ACHIBULUP__constexpr_fun14 
     AutoProperty& operator ++ () & noexcept
@@ -529,15 +725,63 @@ class AutoProperty
         return this->value--;
     }
     ACHIBULUP__constexpr_fun14 
-    AutoProperty& operator += (Type v) & noexcept
+    AutoProperty& operator += (Type value) & noexcept
     {
-        this->value += v;
+        this->value += value;
         return *this;
     }
     ACHIBULUP__constexpr_fun14 
-    AutoProperty& operator -= (Type v) & noexcept
+    AutoProperty& operator -= (Type value) & noexcept
     {
-        this->value -= v;
+        this->value -= value;
+        return *this;
+    }
+    ACHIBULUP__constexpr_fun14 
+    AutoProperty& operator *= (Type value) & noexcept
+    {
+        this->value *= value;
+        return *this;
+    }
+    ACHIBULUP__constexpr_fun14 
+    AutoProperty& operator /= (Type value) & noexcept
+    {
+        this->value /= value;
+        return *this;
+    }
+    ACHIBULUP__constexpr_fun14 
+    AutoProperty& operator %= (Type value) & noexcept
+    {
+        this->value %= value;
+        return *this;
+    }
+    ACHIBULUP__constexpr_fun14 
+    AutoProperty& operator &= (Type value) & noexcept
+    {
+        this->value &= value;
+        return *this;
+    }
+    ACHIBULUP__constexpr_fun14 
+    AutoProperty& operator |= (Type value) & noexcept
+    {
+        this->value |= value;
+        return *this;
+    }
+    ACHIBULUP__constexpr_fun14 
+    AutoProperty& operator ^= (Type value) & noexcept
+    {
+        this->value ^= value;
+        return *this;
+    }
+    ACHIBULUP__constexpr_fun14 
+    AutoProperty& operator >>= (Type value) & noexcept
+    {
+        this->value >>= value;
+        return *this;
+    }
+    ACHIBULUP__constexpr_fun14 
+    AutoProperty& operator <<= (Type value) & noexcept
+    {
+        this->value <<= value;
         return *this;
     }
 
@@ -545,13 +789,142 @@ class AutoProperty
     Type value;
     
     ACHIBULUP__constexpr_fun14
-    static void swap(AutoProperty &a, AutoProperty &b) noexcept
+    void swap(AutoProperty &b) noexcept
     {
-        std::swap(a.value, b.value);
+        using std::swap;
+        swap(this->value, b.value);
     }
 
     friend Container;
 };
+
+
+template<class Container>
+class AutoProperty<std::string, Container>
+{
+  private:
+    constexpr AutoProperty() noexcept : value() {}
+    AutoProperty(std::string str) noexcept : value(std::move(str)) {}
+
+    AutoProperty(const AutoProperty&) = default;
+    AutoProperty(AutoProperty&&) noexcept = default;
+
+  public:
+    AutoProperty& operator = (const AutoProperty &) & = default;
+    AutoProperty& operator = (AutoProperty &&) & noexcept = default;
+
+    friend void swap(AutoProperty &a, AutoProperty &b) noexcept
+    {
+        a.swap(b);
+    }
+
+    std::string operator () () const &
+    {
+        return this->value;
+    }
+    std::string operator () () &&
+    {
+        return std::move(this->value);
+    }
+
+    constexpr operator const char* () const noexcept
+    {
+        return this->value.c_str();
+    }
+
+    constexpr const std::string* operator -> () const noexcept
+    {
+        return &(this->value);
+    }
+
+    friend std::string to_string(const AutoProperty &p)
+    {
+        return p();
+    }
+    friend std::string to_string(AutoProperty &&p)
+    {
+        return std::move(p)();
+    }
+
+    operator string_view () const noexcept
+    {
+        return {this->value.data(), this->value.size()};
+    } 
+
+    friend std::string operator + (const AutoProperty &lhs, 
+                                   const AutoProperty &rhs)
+    {
+        return lhs.value + rhs.value;
+    }
+
+    template<typename Str>
+    friend std::string operator + (const AutoProperty &lhs, const Str &rhs)
+    {
+        return lhs.value + std::forward<Str>(rhs);
+    }
+    template<typename Str>
+    friend std::string operator + (const Str &lhs, const AutoProperty &rhs)
+    {
+        return std::forward<Str>(lhs) + rhs.value;
+    }
+
+    friend std::ostream& operator << (std::ostream &os, const AutoProperty &x)
+    {
+        return os << x();
+    }
+
+    template<typename Str>
+    auto operator = (Str &&rhs) & 
+    -> decltype(std::declval<std::string&>() = std::declval<Str>(), *this)
+    {
+        this->value = std::forward<Str>(rhs);
+        return *this;
+    }
+    AutoProperty& operator = (std::string &&str) & noexcept
+    {
+        this->value = std::move(str);
+        return *this;
+    }
+
+    template<typename Str>
+    AutoProperty& operator += (Str &&rhs) 
+    {
+        this->value += std::forward<Str>(rhs);
+        return *this;
+    }
+    
+    template<typename Functor>
+    void visit(Functor &&functor)
+    {
+        functor(this->value);
+    }
+    template<typename Functor>
+    void visit(Functor &&functor) const
+    {
+        functor(this->value);
+    }
+
+  private:
+    std::string& operator * () noexcept
+    {
+        return this->value;
+    }
+    const std::string& operator * () const noexcept
+    {
+        return this->value;
+    }
+
+    void swap(AutoProperty &b) noexcept
+    {
+        using std::swap;
+        swap(this->value, b.value);
+    }
+
+    std::string value;
+
+    friend Container;
+};
+
 
 } //namespace Achibulup
 
