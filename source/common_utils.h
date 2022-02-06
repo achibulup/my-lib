@@ -9,9 +9,18 @@
 #define ACHIBULUP__Cpp14 (__cplusplus == ACHIBULUP__Cpp14__cplusplus)
 #define ACHIBULUP__Cpp17 (__cplusplus == ACHIBULUP__Cpp17__cplusplus)
 
+#define ACHIBULUP__before_Cpp11 (__cplusplus < ACHIBULUP__Cpp11__cplusplus)
+#define ACHIBULUP__before_Cpp14 (__cplusplus < ACHIBULUP__Cpp14__cplusplus)
+#define ACHIBULUP__before_Cpp17 (__cplusplus < ACHIBULUP__Cpp17__cplusplus)
+
+#define ACHIBULUP__Cpp11_prior (__cplusplus <= ACHIBULUP__Cpp11__cplusplus)
+#define ACHIBULUP__Cpp14_prior (__cplusplus <= ACHIBULUP__Cpp14__cplusplus)
+#define ACHIBULUP__Cpp17_prior (__cplusplus <= ACHIBULUP__Cpp17__cplusplus)
+
 #define ACHIBULUP__Cpp11_later (__cplusplus >= ACHIBULUP__Cpp11__cplusplus)
 #define ACHIBULUP__Cpp14_later (__cplusplus >= ACHIBULUP__Cpp14__cplusplus)
 #define ACHIBULUP__Cpp17_later (__cplusplus >= ACHIBULUP__Cpp17__cplusplus)
+
 
 #include <new>
 #include <string>
@@ -60,7 +69,7 @@ struct Typeof_helper
 template<typename Tp>
 using Typeof = typename Typeof_helper<Tp>::type;
 
-template<bool constraint, typename Tp = void>
+template<bool constraint, typename Tp = int>
 using EnableIf_t = typename std::enable_if<constraint, Tp>::type;
 
 template<typename Tp>
@@ -406,15 +415,35 @@ class ReadOnlyProperty
         std::swap(this->value, b.value);
     }
 
-    friend ACHIBULUP__constexpr_fun14 Type Move(ReadOnlyProperty &src) noexcept
+    class MoveReference
     {
-        Type res = src();
-        src = {};
-        return res;
+        constexpr MoveReference(Type &ref) noexcept : ref(ref) {}
+        ACHIBULUP__constexpr_fun14 Type get() const noexcept
+        {
+            Type res = ref;
+            ref = {};
+            return res;
+        }
+        Type &ref;
+        friend ReadOnlyProperty;
+    };
+
+    constexpr MoveReference Move(ReadOnlyProperty &src) noexcept
+    {
+        return MoveReference{src.value};
     }
-    friend ACHIBULUP__constexpr_fun14 Type Move(ReadOnlyProperty &&src) noexcept
+    constexpr MoveReference Move(ReadOnlyProperty &&src) noexcept
     {
         return Move(src);
+    }
+
+    ACHIBULUP__constexpr_fun14 
+    ReadOnlyProperty(MoveReference value) noexcept : value(value.get()) {}
+    ACHIBULUP__constexpr_fun14 
+    ReadOnlyProperty& operator = (MoveReference value) & noexcept
+    {
+        this->value = value.get();
+        return *this;
     }
 
 
@@ -536,7 +565,7 @@ template<class Container>
 class ReadOnlyProperty<std::string, Container>
 {
   private:
-    constexpr ReadOnlyProperty() noexcept : value() {}
+    ReadOnlyProperty() noexcept : value() {}
     ReadOnlyProperty(std::string str) noexcept : value(std::move(str)) {}
 
     ReadOnlyProperty(const ReadOnlyProperty&) = default;
@@ -561,12 +590,12 @@ class ReadOnlyProperty<std::string, Container>
         return std::move(this->value);
     }
 
-    constexpr operator const char* () const noexcept
+    char operator [] (size_t index) const
     {
-        return this->value.c_str();
+        return this->value[index];
     }
 
-    constexpr const std::string* operator -> () const noexcept
+    const std::string* operator -> () const noexcept
     {
         return &(this->value);
     }
@@ -575,7 +604,7 @@ class ReadOnlyProperty<std::string, Container>
     {
         return p();
     }
-    friend std::string to_string(ReadOnlyProperty &&p)
+    friend std::string to_string(ReadOnlyProperty &&p) noexcept
     {
         return std::move(p)();
     }
@@ -600,6 +629,12 @@ class ReadOnlyProperty<std::string, Container>
     friend std::string operator + (const Str &lhs, const ReadOnlyProperty &rhs)
     {
         return std::forward<Str>(lhs) + rhs.value;
+    }
+
+    friend std::ostream& operator << (std::ostream &os, 
+                                      const ReadOnlyProperty &x)
+    {
+        return os << x->data();
     }
 
   private:
@@ -803,7 +838,7 @@ template<class Container>
 class AutoProperty<std::string, Container>
 {
   private:
-    constexpr AutoProperty() noexcept : value() {}
+    AutoProperty() noexcept : value() {}
     AutoProperty(std::string str) noexcept : value(std::move(str)) {}
 
     AutoProperty(const AutoProperty&) = default;
@@ -822,17 +857,17 @@ class AutoProperty<std::string, Container>
     {
         return this->value;
     }
-    std::string operator () () &&
+    std::string operator () () && noexcept
     {
         return std::move(this->value);
     }
 
-    constexpr operator const char* () const noexcept
+    char operator [] (size_t index) const
     {
-        return this->value.c_str();
+        return this->value[index];
     }
 
-    constexpr const std::string* operator -> () const noexcept
+    const std::string* operator -> () const noexcept
     {
         return &(this->value);
     }
@@ -841,7 +876,7 @@ class AutoProperty<std::string, Container>
     {
         return p();
     }
-    friend std::string to_string(AutoProperty &&p)
+    friend std::string to_string(AutoProperty &&p) noexcept
     {
         return std::move(p)();
     }
@@ -870,7 +905,7 @@ class AutoProperty<std::string, Container>
 
     friend std::ostream& operator << (std::ostream &os, const AutoProperty &x)
     {
-        return os << x();
+        return os << x->data();
     }
 
     template<typename Str>
