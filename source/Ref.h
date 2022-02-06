@@ -6,6 +6,8 @@
 
 
 ///simulate variable reference semantics like in java or c#
+///similar to std::shared_ptr
+///constructor arguments are forwarded to the constructor of the referenced object
 
 namespace Achibulup
 {
