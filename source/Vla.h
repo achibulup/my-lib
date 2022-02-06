@@ -13,24 +13,24 @@ namespace Achibulup
 {
 
 template<typename Tp, std::size_t dim>
-class Vla_base;
-template<typename Tp, std::size_t dim>
 class Vla;
 template<typename Tp, std::size_t dim>
-class Vla_lproxy;
+class VlaLproxy;
 template<typename Tp, std::size_t dim>
-class Vla_clproxy;
+class VlaCLproxy;
 template<typename Tp, std::size_t dim>
-class Vla_rproxy;
+class VlaRproxy;
 template<typename Tp, std::size_t dim>
-class Vla_crproxy;
+class VlaCRproxy;
 template<typename Tp, std::size_t dim>
-class Vla_ptr;
+class VlaBase;
 template<typename Tp, std::size_t dim>
-class const_Vla_ptr;
+class VlaPtr;
+template<typename Tp, std::size_t dim>
+class VlaCPtr;
 
 
-namespace n_Vla_common
+namespace n_Vla
 {
     using size_type = size_t;
     using dim_type = std::size_t;
@@ -40,9 +40,37 @@ namespace n_Vla_common
     }
     inline void throw_Vla_out_of_range(size_type idx, size_type sz)
     {
-        throw std::out_of_range(string_format(
+        throw std::out_of_range(stringFormat(
             "Vla indexing out of range : i (which is ",idx,"), "
             "is not in range [0, size()) (which is [0, ",sz,"))"));
+    };
+    template<typename Tp, std::size_t dim>
+    class VlaProxy;
+    template<typename Tp, std::size_t dim>
+    class VlaCProxy;
+    class VlaKey
+    {
+        constexpr VlaKey () noexcept {}
+        constexpr VlaKey (const VlaKey &) noexcept = default;
+
+        template<typename, std::size_t>
+        friend class Achibulup::Vla;
+        template<typename, std::size_t>
+        friend class Achibulup::VlaLproxy;
+        template<typename, std::size_t>
+        friend class Achibulup::VlaCLproxy;
+        template<typename, std::size_t>
+        friend class Achibulup::VlaRproxy;
+        template<typename, std::size_t>
+        friend class Achibulup::VlaCRproxy;
+        template<typename, std::size_t>
+        friend class Achibulup::VlaPtr;
+        template<typename, std::size_t>
+        friend class Achibulup::VlaCPtr;
+        template<typename, std::size_t>
+        friend class Achibulup::n_Vla::VlaProxy;
+        template<typename, std::size_t>
+        friend class Achibulup::n_Vla::VlaCProxy;
     };
 }
 
@@ -50,35 +78,36 @@ namespace n_Vla_common
 
 
 template<typename Tp, std::size_t dim>
-class Vla_base
+class VlaBase
 {
   public:
-    using size_type = n_Vla_common::size_type;
+    using size_type = n_Vla::size_type;
 
   protected:
-    using dim_type = n_Vla_common::dim_type;
+    using dim_type = n_Vla::dim_type;
     using offset_ptr_t = const size_type*;
     using const_data_ptr_t = RelaxedPtr<const Tp>;
     using data_ptr_t = RelaxedPtr<Tp>;
 
-    Vla_base() noexcept = default;
-    Vla_base(offset_ptr_t offset, data_ptr_t data) 
-    : i_offset(offset), i_data(data) {}
+    VlaBase() noexcept = default;
 
-    Vla_base(const Vla_base&) noexcept = default;
-    Vla_base& operator = (const Vla_base&) = delete;
+    VlaBase(const VlaBase&) noexcept = default;
+    VlaBase& operator = (const VlaBase&) = delete;
+    
+    VlaBase(offset_ptr_t offset, data_ptr_t data) 
+    : m_offset(offset), m_data(data) {}
 
   public:
-    friend bool operator == (const Vla_base &l, const Vla_base &r)
+    friend bool operator == (const VlaBase &l, const VlaBase &r)
     {
         for(dim_type i = 0; i <= dim; ++i)
-          if (l.i_offset[i] != r.i_offset[i]) return false;
-        const_data_ptr_t curl = l.i_data, curr = r.i_data;
-        for(size_type i = 0, cnt = l.i_offset[dim]; i < cnt; ++i)
+          if (l.m_offset[i] != r.m_offset[i]) return false;
+        const_data_ptr_t curl = l.m_data, curr = r.m_data;
+        for(size_type i = 0, cnt = l.m_offset[dim]; i < cnt; ++i)
           if (*(curl++) != *(curr++)) return false;
         return true;
     }
-    friend bool operator != (const Vla_base &l, const Vla_base &r)
+    friend bool operator != (const VlaBase &l, const VlaBase &r)
     {
         return !(l == r);
     }
@@ -91,19 +120,19 @@ class Vla_base
 
     bool empty() const
     {
-        return !this->i_offset[dim];
+        return !this->m_offset[dim];
     }
 
   protected:
     size_type size(size_type i_d) const
     {
-        return this->i_offset[i_d] / this->i_offset[i_d - 1];
+        return this->m_offset[i_d] / this->m_offset[i_d - 1];
     }
 
     void range_check(dim_type i_d, size_type i) const
     {
         if (i >= this->size(i_d) || i < 0) 
-          n_Vla_common::throw_Vla_out_of_range(i, this->size(i_d));
+          n_Vla::throw_Vla_out_of_range(i, this->size(i_d));
     }
     void range_check(size_type i) const
     {
@@ -112,25 +141,26 @@ class Vla_base
 
     data_ptr_t index(size_type i) const
     {
-        return this->i_data + this->i_offset[dim - 1] * i;
+        return this->m_data + this->m_offset[dim - 1] * i;
     }
     data_ptr_t index(dim_type d, size_type i) const
     {
-        return this->i_data + this->i_offset[d - 1] * i;
+        return this->m_data + this->m_offset[d - 1] * i;
     }
 
 
-    offset_ptr_t i_offset;
-    data_ptr_t i_data;
+    offset_ptr_t m_offset;
+    data_ptr_t m_data;
 };
 
-
+namespace n_Vla
+{
 
 template<typename Tp, std::size_t dim>
-class Vla_proxy : protected Vla_base<Tp, dim>
+class VlaProxy : protected VlaBase<Tp, dim>
 {
   protected:
-    using Base = Vla_base<Tp, dim>;
+    using Base = VlaBase<Tp, dim>;
     using typename Base::size_type;
     using typename Base::dim_type;
     using typename Base::offset_ptr_t;
@@ -148,18 +178,19 @@ class Vla_proxy : protected Vla_base<Tp, dim>
     using reverse_iterator           =    typename Vla<Tp, dim>::reverse_iterator;
 
 
-    Vla_proxy() = delete;
+    VlaProxy() = delete;
     
-    Vla_proxy(const Base& sub) noexcept : Base(sub) {}
-    using Base::Base;
-    Vla_proxy(const Vla_proxy&) noexcept = default;
+    VlaProxy(const VlaProxy&) noexcept = default;
+    VlaProxy& operator = (const VlaProxy&) = delete;
 
-    Vla_proxy& operator = (const Vla_proxy&) = delete;
+    VlaProxy(const Base& sub) noexcept : Base(sub) {}
+
+    using Base::Base;
 
   public:
     reference operator [] (size_type i) const &
     {
-        return reference(this->i_offset, this->index(i));
+        return reference(this->m_offset, this->index(i), n_Vla::VlaKey{});
     }
 
     reference at(size_type i) const &
@@ -172,20 +203,23 @@ class Vla_proxy : protected Vla_base<Tp, dim>
 
     const_iterator cbegin() const &
     {
-        return const_iterator(const_pointer(this->i_offset, this->i_data));
+        return const_iterator(this->m_offset, this->m_data, n_Vla::VlaKey{});
     }
     iterator begin() const &
     {
-        return iterator(pointer(this->i_offset, this->i_data));
+        return iterator(this->m_offset, this->m_data, n_Vla::VlaKey{});
     }
 
     const_iterator cend() const &
     {
-        return const_iterator(const_pointer(this->i_offset, this->i_data + this->i_offset[dim]));
+        return const_iterator(this->m_offset, 
+                              this->m_data + this->m_offset[dim],
+                              n_Vla::VlaKey{});
     }
     iterator end() const &
     {
-        return iterator(pointer(this->i_offset, this->i_data + this->i_offset[dim]));
+        return iterator(this->m_offset, this->m_data + this->m_offset[dim], 
+                        n_Vla::VlaKey{});
     }
 
     const_reverse_iterator crbegin() const &
@@ -210,10 +244,10 @@ class Vla_proxy : protected Vla_base<Tp, dim>
 
 
 template<typename Tp>
-class Vla_proxy<Tp, 1> : protected Vla_base<Tp, 1>
+class VlaProxy<Tp, 1> : protected VlaBase<Tp, 1>
 {
   protected:
-    using Base = Vla_base<Tp, 1>;
+    using Base = VlaBase<Tp, 1>;
     using typename Base::size_type;
     using typename Base::dim_type;
     using typename Base::offset_ptr_t;
@@ -231,18 +265,19 @@ class Vla_proxy<Tp, 1> : protected Vla_base<Tp, 1>
     using reverse_iterator           =    typename Vla<Tp, 1>::reverse_iterator;
 
 
-    Vla_proxy() = delete;
+    VlaProxy() = delete;
     
-    Vla_proxy(const Base& sub) noexcept : Base(sub) {}
-    using Base::Base;
-    Vla_proxy(const Vla_proxy&) noexcept = default;
+    VlaProxy(const VlaProxy&) noexcept = default;
+    VlaProxy& operator = (const VlaProxy&) = delete;
+    
+    VlaProxy(const Base& sub) noexcept : Base(sub) {}
 
-    Vla_proxy& operator = (const Vla_proxy&) = delete;
+    using Base::Base;
 
   public:
     reference operator [] (size_type i) const &
     {
-        return this->i_data[i];
+        return this->m_data[i];
     }
 
     reference at (size_type i) const &
@@ -254,20 +289,20 @@ class Vla_proxy<Tp, 1> : protected Vla_base<Tp, 1>
 
     const_iterator cbegin() const &
     {
-        return const_iterator(this->i_data);
+        return const_iterator(this->m_data);
     }
     iterator begin() const &
     {
-        return iterator(this->i_data);
+        return iterator(this->m_data);
     }
 
     const_iterator cend() const &
     {
-        return const_iterator(this->i_data + this->i_offset[1]);
+        return const_iterator(this->m_data + this->m_offset[1]);
     }
     iterator end() const &
     {
-        return iterator(this->i_data + this->i_offset[1]);
+        return iterator(this->m_data + this->m_offset[1]);
     }
 
     const_reverse_iterator crbegin() const &
@@ -290,13 +325,13 @@ class Vla_proxy<Tp, 1> : protected Vla_base<Tp, 1>
 };
 
 template<typename Tp>
-class Vla_proxy<Tp, 0>;
+class VlaProxy<Tp, 0>;
 
 template<typename Tp, std::size_t dim>
-class Vla_cproxy : protected Vla_base<Tp, dim>
+class VlaCProxy : protected VlaBase<Tp, dim>
 {
   protected:
-    using Base = Vla_base<Tp, dim>;
+    using Base = VlaBase<Tp, dim>;
     using typename Base::size_type;
     using typename Base::dim_type;
     using typename Base::offset_ptr_t;
@@ -313,18 +348,19 @@ class Vla_cproxy : protected Vla_base<Tp, dim>
     using const_reverse_iterator     =    typename Vla<Tp, dim>::const_reverse_iterator;
     using reverse_iterator           =    const_reverse_iterator;
 
-    Vla_cproxy() = delete;
+    VlaCProxy() = delete;
     
-    Vla_cproxy(const Base& sub) noexcept : Base(sub) {}
-    using Base::Base;
-    Vla_cproxy(const Vla_cproxy&) noexcept = default;
+    VlaCProxy(const VlaCProxy&) noexcept = default;
+    VlaCProxy& operator = (const VlaCProxy&) = delete;
 
-    Vla_cproxy& operator = (const Vla_cproxy&) = delete;
+    VlaCProxy(const Base& sub) noexcept : Base(sub) {}
+
+    using Base::Base;
 
   public:
     const_reference operator [] (size_type i) const &
     {
-        return const_reference(this->i_offset, this->index(i));
+        return const_reference(this->m_offset, this->index(i), n_Vla::VlaKey{});
     }
 
     const_reference at (size_type i) const &
@@ -337,7 +373,7 @@ class Vla_cproxy : protected Vla_base<Tp, dim>
 
     const_iterator cbegin() const &
     {
-        return const_iterator(const_pointer(this->i_offset, this->i_data));
+        return const_iterator(this->m_offset, this->m_data, n_Vla::VlaKey{});
     }
     const_iterator begin() const &
     {
@@ -346,7 +382,9 @@ class Vla_cproxy : protected Vla_base<Tp, dim>
 
     const_iterator cend() const &
     {
-        return const_iterator(const_pointer(this->i_offset, this->i_data + this->i_offset[dim]));
+        return const_iterator(this->m_offset, 
+                              this->m_data + this->m_offset[dim], 
+                              n_Vla::VlaKey{});
     }
     const_iterator end() const &
     {
@@ -373,10 +411,10 @@ class Vla_cproxy : protected Vla_base<Tp, dim>
 };
 
 template<typename Tp>
-class Vla_cproxy<Tp, 1> : protected Vla_base<Tp, 1>
+class VlaCProxy<Tp, 1> : protected VlaBase<Tp, 1>
 {
   protected:
-    using Base = Vla_base<Tp, 1>;
+    using Base = VlaBase<Tp, 1>;
     using typename Base::size_type;
     using typename Base::dim_type;
     using typename Base::offset_ptr_t;
@@ -394,19 +432,19 @@ class Vla_cproxy<Tp, 1> : protected Vla_base<Tp, 1>
     using reverse_iterator           =    const_reverse_iterator;
 
 
-    Vla_cproxy() = delete;
+    VlaCProxy() = delete;
     
-    Vla_cproxy(const Base& sub) noexcept : Base(sub) {}
+    VlaCProxy(const VlaCProxy&) noexcept = default;
+    VlaCProxy& operator = (const VlaCProxy&) = delete;
+
+    VlaCProxy(const Base& sub) noexcept : Base(sub) {}
+
     using Base::Base;
-    Vla_cproxy(const Vla_cproxy&) noexcept = default;
-
-    Vla_cproxy& operator = (const Vla_cproxy&) = delete;
-
 
   public:
     const_reference operator [] (size_type i) const &
     {
-        return this->i_data[i];
+        return this->m_data[i];
     }
 
     const_reference at (size_type i) const &
@@ -418,7 +456,7 @@ class Vla_cproxy<Tp, 1> : protected Vla_base<Tp, 1>
 
     const_iterator cbegin() const &
     {
-        return const_iterator(this->i_data);
+        return const_iterator(this->m_data);
     }
     const_iterator begin() const &
     {
@@ -427,7 +465,7 @@ class Vla_cproxy<Tp, 1> : protected Vla_base<Tp, 1>
 
     const_iterator cend() const &
     {
-        return const_iterator(this->i_data + this->i_offset[1]);
+        return const_iterator(this->m_data + this->m_offset[1]);
     }
     const_iterator end() const &
     {
@@ -454,14 +492,15 @@ class Vla_cproxy<Tp, 1> : protected Vla_base<Tp, 1>
 };
 
 template<typename Tp>
-class Vla_cproxy<Tp, 0>;
+class VlaCProxy<Tp, 0>;
 
+}
 
 
 template<typename Tp, std::size_t dim>
-class Vla_lproxy : private Vla_proxy<Tp, dim>
+class VlaLproxy : private n_Vla::VlaProxy<Tp, dim>
 {
-    using pBase = Vla_proxy<Tp, dim>;
+    using pBase = n_Vla::VlaProxy<Tp, dim>;
     using typename pBase::dim_type;
 
   public:
@@ -475,20 +514,17 @@ class Vla_lproxy : private Vla_proxy<Tp, dim>
     using typename pBase::const_reverse_iterator;
     using typename pBase::reverse_iterator;
 
-    using typename pBase::Vla_base;
+    using typename pBase::VlaBase;
     using typename pBase::Base;
 
-  private:
-    using pBase::pBase;
-
-    friend Vla_lproxy Vla<Tp, dim + 1>::operator[](size_type)&;
-    friend Vla_lproxy Vla_proxy<Tp, dim + 1>::operator[](size_type)const&;
-    friend Vla_lproxy Vla_ptr<Tp, dim>::operator*()const;
-
   public:
-    Vla_lproxy(const Vla_rproxy<Tp, dim> &cast) noexcept 
+    VlaLproxy(typename Base::offset_ptr_t offset, 
+              typename Base::data_ptr_t ptr, n_Vla::VlaKey) noexcept
+    : pBase(offset, ptr) {}
+
+    VlaLproxy(const VlaRproxy<Tp, dim> &cast) noexcept 
     : pBase(static_cast<const Base&>(cast)) {}
-    Vla_lproxy(const Vla_rproxy<Tp, dim> &&) = delete;
+    VlaLproxy(const VlaRproxy<Tp, dim> &&) = delete;
 
 
     using Base::size;
@@ -508,13 +544,13 @@ class Vla_lproxy : private Vla_proxy<Tp, dim>
 };
 
 template<typename tp>
-class Vla_lproxy<tp, 0>;
+class VlaLproxy<tp, 0>;
 
 
 template<typename Tp, std::size_t dim>
-class Vla_clproxy : private Vla_cproxy<Tp, dim>
+class VlaCLproxy : private n_Vla::VlaCProxy<Tp, dim>
 {
-    using pBase = Vla_cproxy<Tp, dim>;
+    using pBase = n_Vla::VlaCProxy<Tp, dim>;
     using typename pBase::dim_type;
 
   public:
@@ -529,26 +565,22 @@ class Vla_clproxy : private Vla_cproxy<Tp, dim>
     using typename pBase::const_reverse_iterator;
     using typename pBase::reverse_iterator;
 
-    using typename pBase::Vla_base;
+    using typename pBase::VlaBase;
     using typename pBase::Base;
 
-  private:
-    using pBase::pBase;
-
-
-    friend Vla_clproxy Vla<Tp, dim + 1>::operator[](size_type)const&;
-    friend Vla_clproxy Vla_cproxy<Tp, dim + 1>::operator[](size_type)const&;
-    friend Vla_clproxy const_Vla_ptr<Tp, dim>::operator*()const;
-
   public:
-    Vla_clproxy(const Vla_lproxy<Tp, dim> &cast) noexcept 
+    VlaCLproxy(typename Base::offset_ptr_t offset, 
+               typename Base::data_ptr_t ptr, n_Vla::VlaKey) noexcept
+    : pBase(offset, ptr) {}
+
+    VlaCLproxy(const VlaLproxy<Tp, dim> &cast) noexcept 
     : pBase(static_cast<const Base&>(cast)) {}
-    Vla_clproxy(const Vla_crproxy<Tp, dim> &cast) noexcept 
+    VlaCLproxy(const VlaCRproxy<Tp, dim> &cast) noexcept 
     : pBase(static_cast<const Base&>(cast)) {}
-    Vla_clproxy(const Vla_crproxy<Tp, dim> &&) = delete;
-    Vla_clproxy(const Vla_rproxy<Tp, dim> &cast) noexcept 
+    VlaCLproxy(const VlaCRproxy<Tp, dim> &&) = delete;
+    VlaCLproxy(const VlaRproxy<Tp, dim> &cast) noexcept 
     : pBase(static_cast<const Base&>(cast)) {}
-    Vla_clproxy(const Vla_rproxy<Tp, dim> &&) = delete;
+    VlaCLproxy(const VlaRproxy<Tp, dim> &&) = delete;
 
     using pBase::size;
     using Base::empty;
@@ -567,13 +599,13 @@ class Vla_clproxy : private Vla_cproxy<Tp, dim>
 };
 
 template<typename tp>
-class Vla_clproxy<tp, 0>;
+class VlaCLproxy<tp, 0>;
 
 
 template<typename Tp, std::size_t dim>
-class Vla_rproxy : private Vla_proxy<Tp, dim>
+class VlaRproxy : private n_Vla::VlaProxy<Tp, dim>
 {
-    using pBase = Vla_proxy<Tp, dim>;
+    using pBase = n_Vla::VlaProxy<Tp, dim>;
     using typename pBase::dim_type;
 
   public:
@@ -589,16 +621,11 @@ class Vla_rproxy : private Vla_proxy<Tp, dim>
 
     using rvalue = typename Vla<Tp, dim>::rvalue;
 
-    using typename pBase::Vla_base;
+    using typename pBase::VlaBase;
     using typename pBase::Base;
 
-  private:
-    using pBase::pBase;
-
-    friend class Vla<Tp, dim + 1>;
-
   public:
-    explicit Vla_rproxy(const Vla_lproxy<Tp, dim> &cast) noexcept 
+    explicit VlaRproxy(const VlaLproxy<Tp, dim> &cast) noexcept 
     : pBase(static_cast<const Base&>(cast)) {}
 
 
@@ -640,13 +667,13 @@ class Vla_rproxy : private Vla_proxy<Tp, dim>
 };
 
 template<typename tp>
-class Vla_rproxy<tp, 0>;
+class VlaRproxy<tp, 0>;
 
 
 template<typename Tp, std::size_t dim>
-class Vla_crproxy : private Vla_cproxy<Tp, dim>
+class VlaCRproxy : private n_Vla::VlaCProxy<Tp, dim>
 {
-    using pBase = Vla_cproxy<Tp, dim>;
+    using pBase = n_Vla::VlaCProxy<Tp, dim>;
     using typename pBase::dim_type;
 
   public:
@@ -664,20 +691,15 @@ class Vla_crproxy : private Vla_cproxy<Tp, dim>
     using const_rvalue = typename Vla<Tp, dim>::const_rvalue;
     using rvalue = const_rvalue;
 
-    using typename pBase::Vla_base;
+    using typename pBase::VlaBase;
     using typename pBase::Base;
 
-  private:
-    using pBase::pBase;
-
-    friend class Vla<Tp, dim + 1>;
-
   public:
-    Vla_crproxy(const Vla_rproxy<Tp, dim> &cast) noexcept 
+    VlaCRproxy(const VlaRproxy<Tp, dim> &cast) noexcept 
     : pBase(static_cast<const Base&>(cast)) {}
-    explicit Vla_crproxy(const Vla_clproxy<Tp, dim> &cast) noexcept 
+    explicit VlaCRproxy(const VlaCLproxy<Tp, dim> &cast) noexcept 
     : pBase(static_cast<const Base&>(cast)) {}
-    explicit Vla_crproxy(const Vla_lproxy<Tp, dim> &cast) noexcept 
+    explicit VlaCRproxy(const VlaLproxy<Tp, dim> &cast) noexcept 
     : pBase(static_cast<const Base&>(cast)) {}
 
 
@@ -719,20 +741,20 @@ class Vla_crproxy : private Vla_cproxy<Tp, dim>
 };
 
 template<typename tp>
-class Vla_rproxy<tp, 0>;
+class VlaRproxy<tp, 0>;
 
 
 template<typename Tp, std::size_t dim>
-class Vla_ptr
+class VlaPtr
 {
-    using dim_type = std::size_t;
+    using dim_type           =  std::size_t;
     using size_type          =  typename Vla<Tp, dim>::size_type;
 
   public:
     using iterator_category  =  std::random_access_iterator_tag;
     using difference_type    =  size_type;
-    using value_type         =  Vla_base<Tp, dim>;
-    using reference          =  Vla_lproxy<Tp, dim>;
+    using value_type         =  VlaBase<Tp, dim>;
+    using reference          =  VlaLproxy<Tp, dim>;
     using pointer = struct{
         reference ref;
         reference* operator -> () &&
@@ -741,25 +763,18 @@ class Vla_ptr
         }
     };
 
-  private:
-    const size_type *i_offset;
-    RelaxedPtr<Tp> i_data;
+    VlaPtr() noexcept = default;
+    VlaPtr& operator = (const VlaPtr&) & noexcept = default;
 
-    Vla_ptr(const size_type *ofs, RelaxedPtr<Tp> p) : i_offset(ofs), i_data(p) {}
-
-    friend class Vla<Tp, dim + 1>;
-    friend class Vla_proxy<Tp, dim + 1>;
-    friend class const_Vla_ptr<Tp, dim>;
-
-  public:
-    Vla_ptr() noexcept = default;
-    Vla_ptr(const Vla_ptr&) noexcept = default;
-    Vla_ptr& operator = (const Vla_ptr&) & noexcept = default;
+    VlaPtr(decltype(nullptr)) noexcept : VlaPtr() {}
+    
+    VlaPtr(const size_type *ofs, RelaxedPtr<Tp> ptr, n_Vla::VlaKey) noexcept
+    : VlaPtr(ofs, ptr) {}
 
 
     reference operator * () const
     {
-        return reference(this->i_offset, this->i_data);
+        return reference(this->m_offset, this->m_data, n_Vla::VlaKey{});
     }
 
     pointer operator -> () const
@@ -767,27 +782,27 @@ class Vla_ptr
         return pointer{*(*this)};
     }
 
-    Vla_ptr& operator ++ () &
+    VlaPtr& operator ++ () &
     {
-        this->i_data += this->i_offset[dim];
+        this->m_data += this->m_offset[dim];
         return *this;
     }
-    Vla_ptr operator ++ (int) &
+    VlaPtr operator ++ (int) &
     {
-        Vla_ptr store = *this;
+        VlaPtr store = *this;
         ++(*this);
         return store;
     }
 
 
-    Vla_ptr& operator -- () &
+    VlaPtr& operator -- () &
     {
-        this->i_data -= this->i_offset[dim];
+        this->m_data -= this->m_offset[dim];
         return *this;
     }
-    Vla_ptr operator -- (int) &
+    VlaPtr operator -- (int) &
     {
-        Vla_ptr store = *this;
+        VlaPtr store = *this;
         --(*this);
         return store;
     }
@@ -798,65 +813,72 @@ class Vla_ptr
         return *((*this) + i);
     }
 
-    friend Vla_ptr operator + (const Vla_ptr &Ptr, difference_type i)
+    friend VlaPtr operator + (const VlaPtr &Ptr, difference_type i)
     {
-        return Vla_ptr(Ptr.i_offset, Ptr.ptr + Ptr.i_offset[dim] * i);
+        return VlaPtr(Ptr.m_offset, Ptr.ptr + Ptr.m_offset[dim] * i);
     }
-    friend Vla_ptr operator + (difference_type i, const Vla_ptr &Ptr)
+    friend VlaPtr operator + (difference_type i, const VlaPtr &Ptr)
     {
-        return Vla_ptr(Ptr.i_offset, Ptr.ptr + Ptr.i_offset[dim] * i);
+        return VlaPtr(Ptr.m_offset, Ptr.ptr + Ptr.m_offset[dim] * i);
     }
-    friend Vla_ptr operator - (const Vla_ptr &Ptr, difference_type i)
+    friend VlaPtr operator - (const VlaPtr &Ptr, difference_type i)
     {
-        return Vla_ptr(Ptr.i_offset, Ptr.ptr - Ptr.i_offset[dim] * i);
+        return VlaPtr(Ptr.m_offset, Ptr.ptr - Ptr.m_offset[dim] * i);
     }
-    friend difference_type operator - (const Vla_ptr &Ptr1, const Vla_ptr &Ptr2)
+    friend difference_type operator - (const VlaPtr &Ptr1, const VlaPtr &Ptr2)
     {
-        return (Ptr1.ptr - Ptr2.ptr) / Ptr1.i_offset[dim];
-    }
-
-    Vla_ptr& operator += (difference_type i) &
-    {
-        this->i_data += this->i_offset[dim] * i;
-        return *this;
-    }
-    Vla_ptr& operator -= (difference_type i) &
-    {
-        this->i_data -= this->i_offset[dim] * i;
-        return *this;
+        return (Ptr1.ptr - Ptr2.ptr) / Ptr1.m_offset[dim];
     }
 
-    friend bool operator == (const Vla_ptr &l, const Vla_ptr &r)
+    VlaPtr& operator += (difference_type i) &
+    {
+        this->m_data += this->m_offset[dim] * i;
+        return *this;
+    }
+    VlaPtr& operator -= (difference_type i) &
+    {
+        this->m_data -= this->m_offset[dim] * i;
+        return *this;
+    }
+
+    friend bool operator == (const VlaPtr &l, const VlaPtr &r) noexcept
     {  return l.ptr == r.ptr;  }
-    friend bool operator != (const Vla_ptr &l, const Vla_ptr &r)
+    friend bool operator != (const VlaPtr &l, const VlaPtr &r) noexcept
     {  return l.ptr != r.ptr;  }
-    friend bool operator > (const Vla_ptr &l, const Vla_ptr &r)
+    friend bool operator > (const VlaPtr &l, const VlaPtr &r) noexcept
     {  return l.ptr > r.ptr;  }
-    friend bool operator >= (const Vla_ptr &l, const Vla_ptr &r)
+    friend bool operator >= (const VlaPtr &l, const VlaPtr &r) noexcept
     {  return l.ptr >= r.ptr;  }
-    friend bool operator < (const Vla_ptr &l, const Vla_ptr &r)
+    friend bool operator < (const VlaPtr &l, const VlaPtr &r) noexcept
     {  return l.ptr < r.ptr;  }
-    friend bool operator <= (const Vla_ptr &l, const Vla_ptr &r)
+    friend bool operator <= (const VlaPtr &l, const VlaPtr &r) noexcept
     {  return l.ptr <= r.ptr;  }
+
+  private:
+    VlaPtr(const size_type *ofs, RelaxedPtr<Tp> ptr) noexcept
+    : m_offset(ofs), m_data(ptr) {}
+
+    const size_type *m_offset;
+    RelaxedPtr<Tp> m_data;
 };
 
 
 template<typename Tp>
-class Vla_ptr<Tp, 0>;
+class VlaPtr<Tp, 0>;
 
 
 
 template<typename Tp, std::size_t dim>
-class const_Vla_ptr
+class VlaCPtr
 {
-    using dim_type = std::size_t;
+    using dim_type           =  std::size_t;
     using size_type          =  typename Vla<Tp, dim>::size_type;
 
   public:
     using iterator_category  =  std::random_access_iterator_tag;
     using difference_type    =  size_type;
-    using value_type         =  Vla_base<Tp, dim>;
-    using const_reference    =  Vla_clproxy<Tp, dim>;
+    using value_type         =  VlaBase<Tp, dim>;
+    using const_reference    =  VlaCLproxy<Tp, dim>;
     using reference          =  const_reference;
     using const_pointer = struct{
         const_reference ref;
@@ -867,27 +889,22 @@ class const_Vla_ptr
     };
     using pointer = const_pointer;
 
-  private:
-    const size_type *i_offset;
-    RelaxedPtr<Tp> i_data;
 
-    const_Vla_ptr(const size_type *ofs, RelaxedPtr<Tp> p) : i_offset(ofs), i_data(p) {}
+    VlaCPtr() noexcept = default;
+    VlaCPtr& operator = (const VlaCPtr&) & noexcept = default;
 
-    friend class Vla<Tp, dim + 1>;
-    friend class Vla_proxy<Tp, dim + 1>;
-    friend class Vla_cproxy<Tp, dim + 1>;
+    VlaCPtr(decltype(nullptr)) noexcept : VlaCPtr() {}
 
-  public:
-    const_Vla_ptr() noexcept = default;
-    const_Vla_ptr(const const_Vla_ptr&) noexcept = default;
-    const_Vla_ptr& operator = (const const_Vla_ptr&) & noexcept = default;
+    VlaCPtr(const size_type *ofs, RelaxedPtr<Tp> ptr, n_Vla::VlaKey) noexcept
+    : VlaCPtr(ofs, ptr) {}
 
-    const_Vla_ptr(const Vla_ptr<Tp, dim>& cast) : i_offset(cast.i_offset), i_data(cast.i_data) {}
+    VlaCPtr(const VlaPtr<Tp, dim>& cast) noexcept
+    : m_offset(cast.m_offset), m_data(cast.m_data) {}
 
 
     const_reference operator * () const
     {
-        return const_reference(this->i_offset, this->i_data);
+        return const_reference(this->m_offset, this->m_data, n_Vla::VlaKey{});
     }
 
     pointer operator -> () const
@@ -895,27 +912,27 @@ class const_Vla_ptr
         return pointer{*(*this)};
     }
 
-    const_Vla_ptr& operator ++ () &
+    VlaCPtr& operator ++ () &
     {
-        this->i_data += this->i_offset[dim];
+        this->m_data += this->m_offset[dim];
         return *this;
     }
-    const_Vla_ptr operator ++ (int) &
+    VlaCPtr operator ++ (int) &
     {
-        const_Vla_ptr store = *this;
+        VlaCPtr store = *this;
         ++(*this);
         return store;
     }
 
 
-    const_Vla_ptr& operator -- () &
+    VlaCPtr& operator -- () &
     {
-        this->i_data -= this->i_offset[dim];
+        this->m_data -= this->m_offset[dim];
         return *this;
     }
-    const_Vla_ptr operator -- (int) &
+    VlaCPtr operator -- (int) &
     {
-        const_Vla_ptr store = *this;
+        VlaCPtr store = *this;
         --(*this);
         return store;
     }
@@ -926,61 +943,68 @@ class const_Vla_ptr
         return *(*this + i);
     }
 
-    friend const_Vla_ptr operator + (const const_Vla_ptr &Ptr, difference_type i)
+    friend VlaCPtr operator + (const VlaCPtr &Ptr, difference_type i)
     {
-        return const_Vla_ptr(Ptr.i_offset, Ptr.ptr + Ptr.i_offset[dim] * i);
+        return VlaCPtr(Ptr.m_offset, Ptr.ptr + Ptr.m_offset[dim] * i);
     }
-    friend const_Vla_ptr operator + (difference_type i, const const_Vla_ptr &Ptr)
+    friend VlaCPtr operator + (difference_type i, const VlaCPtr &Ptr)
     {
-        return const_Vla_ptr(Ptr.i_offset, Ptr.ptr + Ptr.i_offset[dim] * i);
+        return VlaCPtr(Ptr.m_offset, Ptr.ptr + Ptr.m_offset[dim] * i);
     }
-    friend const_Vla_ptr operator - (const const_Vla_ptr &Ptr, difference_type i)
+    friend VlaCPtr operator - (const VlaCPtr &Ptr, difference_type i)
     {
-        return const_Vla_ptr(Ptr.i_offset, Ptr.ptr - Ptr.i_offset[dim] * i);
+        return VlaCPtr(Ptr.m_offset, Ptr.ptr - Ptr.m_offset[dim] * i);
     }
-    friend difference_type operator - (const const_Vla_ptr &Ptr1, const const_Vla_ptr &Ptr2)
+    friend difference_type operator - (const VlaCPtr &Ptr1, const VlaCPtr &Ptr2)
     {
-        return (Ptr1.ptr - Ptr2.ptr) / Ptr1.i_offset[dim];
-    }
-
-    const_Vla_ptr& operator += (difference_type i) &
-    {
-        this->i_data += this->i_offset[dim] * i;
-        return *this;
-    }
-    const_Vla_ptr& operator -= (difference_type i) &
-    {
-        this->i_data -= this->i_offset[dim] * i;
-        return *this;
+        return (Ptr1.ptr - Ptr2.ptr) / Ptr1.m_offset[dim];
     }
 
-    friend bool operator == (const const_Vla_ptr &l, const const_Vla_ptr &r)
+    VlaCPtr& operator += (difference_type i) &
+    {
+        this->m_data += this->m_offset[dim] * i;
+        return *this;
+    }
+    VlaCPtr& operator -= (difference_type i) &
+    {
+        this->m_data -= this->m_offset[dim] * i;
+        return *this;
+    }
+
+    friend bool operator == (const VlaCPtr &l, const VlaCPtr &r) noexcept
     {  return l.ptr == r.ptr;  }
-    friend bool operator !=(const const_Vla_ptr &l, const const_Vla_ptr &r)
+    friend bool operator !=(const VlaCPtr &l, const VlaCPtr &r) noexcept
     {  return l.ptr != r.ptr;  }
-    friend bool operator > (const const_Vla_ptr &l, const const_Vla_ptr &r)
+    friend bool operator > (const VlaCPtr &l, const VlaCPtr &r) noexcept
     {  return l.ptr > r.ptr;  }
-    friend bool operator >= (const const_Vla_ptr &l, const const_Vla_ptr &r)
+    friend bool operator >= (const VlaCPtr &l, const VlaCPtr &r) noexcept
     {  return l.ptr >= r.ptr;  }
-    friend bool operator < (const const_Vla_ptr &l, const const_Vla_ptr &r)
+    friend bool operator < (const VlaCPtr &l, const VlaCPtr &r) noexcept
     {  return l.ptr < r.ptr;  }
-    friend bool operator <= (const const_Vla_ptr &l, const const_Vla_ptr &r)
+    friend bool operator <= (const VlaCPtr &l, const VlaCPtr &r) noexcept
     {  return l.ptr <= r.ptr;  }
+
+  private:
+    VlaCPtr(const size_type *ofs, RelaxedPtr<Tp> ptr) noexcept
+    : m_offset(ofs), m_data(ptr) {}
+
+    const size_type *m_offset;
+    RelaxedPtr<Tp> m_data;
 };
 
 
 template<typename Tp>
-class const_Vla_ptr<Tp, 0>;
+class VlaCPtr<Tp, 0>;
 
 
 
 #if ACHIBULUP__Cpp17_later
 
 template<std::size_t dim, std::size_t...seq>
-size_t Vla_index_helper(const size_t(&idx)[dim], const size_t *i_offset
+size_t Vla_index_helper(const size_t(&idx)[dim], const size_t *m_offset
                             , std::integer_sequence<std::size_t, seq...>)
 {
-    return (... + (idx[seq] * i_offset[dim - 1 - seq]));
+    return (... + (idx[seq] * m_offset[dim - 1 - seq]));
 }
 
 #endif // __cplusplus
@@ -992,23 +1016,23 @@ template<typename Tp, std::size_t dim>
 struct Vla_initializer
 {
     std::array<size_t, dim> dimensions;
-    std::initializer_list<Vla_initializer<Tp, dim - 1>> i_data;
+    std::initializer_list<Vla_initializer<Tp, dim - 1>> m_data;
     Vla_initializer(std::initializer_list<Vla_initializer<Tp, dim - 1>> il) 
-    : dimensions{}, i_data(il)
+    : dimensions{}, m_data(il)
     {
-        dimensions[dim - 1] = i_data.size();
-        for(auto &sub : i_data)
+        dimensions[dim - 1] = m_data.size();
+        for(auto &sub : m_data)
         for(std::size_t i = 0; i < dim - 1; ++i)
-          n_Vla_common::maximize(dimensions[i], sub.dimensions[i]);
+          n_Vla::maximize(dimensions[i], sub.dimensions[i]);
     }
 };
 template<typename Tp>
 struct Vla_initializer<Tp, 1>
 {
     std::array<size_t, 1> dimensions;
-    std::initializer_list<Tp> i_data;
+    std::initializer_list<Tp> m_data;
     Vla_initializer(std::initializer_list<Tp> il) 
-    : dimensions{static_cast<size_t>(il.size())}, i_data(il) {}
+    : dimensions{static_cast<size_t>(il.size())}, m_data(il) {}
 };
 template<typename Tp>
 struct Vla_initializer<Tp, 0>;
@@ -1023,7 +1047,7 @@ struct VlaListInitHelper
     {
         RelaxedPtr<Tp> en = pos + dimensions[dim];
         for(auto &sub : init_list){
-          VlaListInitHelper<Tp, dim - 1>::construct(pos, sub.i_data, dimensions);
+          VlaListInitHelper<Tp, dim - 1>::construct(pos, sub.m_data, dimensions);
           pos += dimensions[dim - 1];
         }
         constructor<Tp>::construct(en - pos, pos);
@@ -1039,7 +1063,7 @@ struct VlaListInitHelper<Tp, dim, false>
         typename constructor<Tp>::exception_safety p{pos, pos};
         RelaxedPtr<Tp> en = pos + dimensions[dim];
         for(auto &sub : init_list){
-          VlaListInitHelper<Tp, dim - 1>::construct(p.last, sub.i_data, dimensions);
+          VlaListInitHelper<Tp, dim - 1>::construct(p.last, sub.m_data, dimensions);
           p.last += dimensions[dim - 1];
         }
         constructor<Tp>::construct(en - p.last, p.last);
@@ -1086,7 +1110,7 @@ struct ChangeRetAddArg<Ret(Args...), NewRet, Add>
 template<typename Tp, std::size_t dim>
 struct VlaArgHelper
 {
-    using size_list_t = std::array<typename Vla_base<Tp, dim>::size_type, dim>;
+    using size_list_t = std::array<typename VlaBase<Tp, dim>::size_type, dim>;
     struct value_initializer
     {
         size_list_t size_list;
@@ -1133,10 +1157,10 @@ struct VlaArgHelper<Tp, 0>
 
 
 template<typename Tp, std::size_t dim>
-class Vla_impl : protected Vla_base<Tp, dim>
+class Vla_impl : protected VlaBase<Tp, dim>
 {
   protected:
-    using Base = Vla_base<Tp, dim>;
+    using Base = VlaBase<Tp, dim>;
     using typename Base::size_type;
     using typename Base::dim_type;
     using typename Base::offset_ptr_t;
@@ -1151,6 +1175,37 @@ class Vla_impl : protected Vla_base<Tp, dim>
     {
         this->init();
     }
+
+    Vla_impl(const Vla_impl &cpy) : i_offset_base(cpy.i_offset_base)
+    {
+        this->copy(cpy.m_data, cpy.m_offset[dim]);
+    }
+    Vla_impl(Vla_impl &&mov) noexcept : Vla_impl()
+    {
+        swap(*this, mov);
+    }
+
+    Vla_impl& operator = (Vla_impl other) noexcept
+    {
+        swap(*this, other);
+        return *this;
+    }
+
+    friend void swap(Vla_impl &a, Vla_impl &b) noexcept
+    {
+        using std::swap;
+        swap(a.m_data, b.m_data);
+        swap(a.i_offset_base, b.i_offset_base);
+    }
+
+    ~Vla_impl()
+    {
+        if (this->m_data != data_ptr_t()){
+            destructor<Tp>::destroy(this->m_data, this->m_offset[dim]);
+            deleteBuffer(this->m_data);
+        }
+    }
+
 
     Vla_impl(const size_list_t &size_list) 
     : i_offset_base(calc_offset(size_list))
@@ -1168,46 +1223,17 @@ class Vla_impl : protected Vla_base<Tp, dim>
         this->init(this->i_offset_base[dim], init_list);
     }
 
-    Vla_impl(Vla_impl &&mov) noexcept : Vla_impl()
-    {
-        swap(*this, mov);
-    }
-    Vla_impl(const Vla_impl &cpy) : i_offset_base(cpy.i_offset_base)
-    {
-        this->copy(cpy.i_data, cpy.i_offset[dim]);
-    }
-
-    Vla_impl& operator = (Vla_impl other) noexcept
-    {
-        swap(*this, other);
-        return *this;
-    }
-
-    friend void swap(Vla_impl &a, Vla_impl &b) noexcept
-    {
-        using std::swap;
-        swap(a.i_data, b.i_data);
-        swap(a.i_offset_base, b.i_offset_base);
-    }
-
-    ~Vla_impl()
-    {
-        if (this->i_data != data_ptr_t()){
-            destructor<Tp>::destroy(this->i_data, this->i_offset[dim]);
-            delete_buffer(this->i_data);
-        }
-    }
 
   public:
     template<std::size_t Nm, EnableIf_t<Nm == dim>* = nullptr>
     Tp& operator [] (const size_type (&i)[Nm]) &
     {
-        return this->i_data[this->get_index(i)];
+        return this->m_data[this->get_index(i)];
     }
     template<std::size_t Nm, EnableIf_t<Nm == dim>* = nullptr>
     const Tp& operator [] (const size_type (&i)[Nm]) const &
     {
-        return this->i_data[this->get_index(i)];
+        return this->m_data[this->get_index(i)];
     }
     template<std::size_t Nm, EnableIf_t<Nm == dim>* = nullptr>
     Tp&& operator [] (const size_type (&i)[Nm]) &&
@@ -1304,7 +1330,7 @@ class Vla_impl : protected Vla_base<Tp, dim>
         data_ptr_t ptr;
         ~safe_arr()
         {
-            delete_buffer(ptr);
+            deleteBuffer(ptr);
         }
     };
 
@@ -1328,7 +1354,7 @@ class Vla_impl : protected Vla_base<Tp, dim>
         offset_arr_t res{1};
         for(auto &val : init_list)
           for(std::size_t i = 1; i < dim; ++i)
-            n_Vla_common::maximize(res[i], val.dimensions[i - 1]);
+            n_Vla::maximize(res[i], val.dimensions[i - 1]);
         res[dim] = init_list.size();
         for(std::size_t i = 0; i < dim; ++i){
           if (res[i + 1] <= 0)
@@ -1340,45 +1366,45 @@ class Vla_impl : protected Vla_base<Tp, dim>
 
     void set_offset_ptr() &
     {
-        this->i_offset = this->i_offset_base.data();
+        this->m_offset = this->i_offset_base.data();
     }
 
     void init() &
     {
         set_offset_ptr();
-        this->i_data = {};
+        this->m_data = {};
     }
     void init(size_type len) &
     {
         set_offset_ptr();
-        safe_arr safe{new_buffer<Tp>(len)};
-        this->i_data = safe.ptr;
-        constructor<Tp>::construct(len, this->i_data);
+        safe_arr safe{newBuffer<Tp>(len)};
+        this->m_data = safe.ptr;
+        constructor<Tp>::construct(len, this->m_data);
         safe.ptr = nullptr;
     }
     void init(size_type len, const Tp &value) &
     {
         set_offset_ptr();
-        safe_arr safe{new_buffer<Tp>(len)};
-        this->i_data = safe.ptr;
-        constructor<Tp>::construct(len, this->i_data, value);
+        safe_arr safe{newBuffer<Tp>(len)};
+        this->m_data = safe.ptr;
+        constructor<Tp>::construct(len, this->m_data, value);
         safe.ptr = nullptr;
     }
     void init(size_type len, initializer_list init_list) &
     {
         set_offset_ptr();
-        safe_arr safe{new_buffer<Tp>(len)};
-        this->i_data = safe.ptr;
-        VlaListInitHelper<Tp, dim>::construct(this->i_data, init_list, this->i_offset);
+        safe_arr safe{newBuffer<Tp>(len)};
+        this->m_data = safe.ptr;
+        VlaListInitHelper<Tp, dim>::construct(this->m_data, init_list, this->m_offset);
         safe.ptr = nullptr;
     }
 
     void copy(const_data_ptr_t cpy, size_type len) &
     {
         set_offset_ptr();
-        safe_arr safe{new_buffer<Tp>(len)};
-        this->i_data = safe.ptr;
-        constructor<Tp>::copy_construct(len, this->i_data, cpy);
+        safe_arr safe{newBuffer<Tp>(len)};
+        this->m_data = safe.ptr;
+        constructor<Tp>::copy_construct(len, this->m_data, cpy);
         safe.ptr = nullptr;
     }
 
@@ -1391,7 +1417,7 @@ class Vla_impl : protected Vla_base<Tp, dim>
 #if ACHIBULUP__Cpp17_later
     size_type get_index(const size_type(&i)[dim])
     {
-        return Vla_index_helper(i, this->i_offset, 
+        return Vla_index_helper(i, this->m_offset, 
                                 std::make_index_sequence<dim>());
     }
 #else
@@ -1399,7 +1425,7 @@ class Vla_impl : protected Vla_base<Tp, dim>
     {
         size_type res = 0;
         for(dim_type d = dim; d != 0; --d)
-          res += i[dim - d] * this->i_offset[d - 1];
+          res += i[dim - d] * this->m_offset[d - 1];
         return res;
     }
 #endif // __cplusplus
@@ -1423,29 +1449,39 @@ class Vla : private Vla_impl<Tp, dim>
     using ArgsBase = VlaArgHelper<Tp, dim>;
 
   public:
-    using typename Base::size_type;
-    using value_type                 =    Vla_base<Tp, dim - 1>;
-    using const_reference            =    Vla_clproxy<Tp, dim - 1>;
-    using reference                  =    Vla_lproxy<Tp, dim - 1>;
-    using const_rvalue               =    Vla_crproxy<Tp, dim - 1>;
-    using rvalue                     =    Vla_rproxy<Tp, dim - 1>;
-    using const_pointer              =    const_Vla_ptr<Tp, dim - 1>;
-    using pointer                    =    Vla_ptr<Tp, dim - 1>;
-    using const_iterator             =    const_pointer;
+    using value_type                 =    VlaBase<Tp, dim - 1>;
+    using reference                  =    VlaLproxy<Tp, dim - 1>;
+    using const_reference            =    VlaCLproxy<Tp, dim - 1>;
+    using rvalue                     =    VlaRproxy<Tp, dim - 1>;
+    using const_rvalue               =    VlaCRproxy<Tp, dim - 1>;
+    using pointer                    =    VlaPtr<Tp, dim - 1>;
+    using const_pointer              =    VlaCPtr<Tp, dim - 1>;
     using iterator                   =    pointer;
-    using const_reverse_iterator     =    std::reverse_iterator<const_iterator>;
+    using const_iterator             =    const_pointer;
     using reverse_iterator           =    std::reverse_iterator<iterator>;
+    using const_reverse_iterator     =    std::reverse_iterator<const_iterator>;
+    
+    using typename Impl::VlaBase;
+    using typename Base::size_type;
 
-    using typename Impl::Vla_base;
-
-    using size_list_t                = typename ArgsBase::size_list_t;
-    using value_initializer          = typename ArgsBase::value_initializer;
-    using initializer_list           = typename ArgsBase::initializer_list;
+    using size_list_t                =    typename ArgsBase::size_list_t;
+    using value_initializer          =    typename ArgsBase::value_initializer;
+    using initializer_list           =    typename ArgsBase::initializer_list;
     
 
 
 
     Vla() = default;
+    Vla(const Vla&) = default;
+    Vla(Vla&&) noexcept = default;
+
+    Vla& operator = (const Vla&) & = default;
+    Vla& operator = (Vla&&) & noexcept = default;
+
+    friend void swap(Vla &a, Vla &b) noexcept
+    {
+        swap(static_cast<Impl&>(a), static_cast<Impl&>(b));
+    }
 
     template<typename ...bound, typename = typename VlaArgHelper<Tp, dim>
                                  ::template IsSizeListArgs<bound...>>
@@ -1458,16 +1494,6 @@ class Vla : private Vla_impl<Tp, dim>
 
     Vla(initializer_list il) : Impl(il) {}
 
-    Vla(Vla&&) noexcept = default;
-    Vla(const Vla&) = default;
-
-    Vla& operator = (Vla&&) & noexcept = default;
-    Vla& operator = (const Vla&) & = default;
-
-    friend void swap(Vla &a, Vla &b) noexcept
-    {
-        swap(static_cast<Impl&>(a), static_cast<Impl&>(b));
-    }
 
 
 
@@ -1481,11 +1507,11 @@ class Vla : private Vla_impl<Tp, dim>
 
     reference operator [] (size_type i) &
     {
-        return reference(this->i_offset, this->index(i));
+        return reference(this->m_offset, this->index(i), n_Vla::VlaKey{});
     }
     const_reference operator [] (size_type i) const &
     {
-        return const_reference(this->i_offset, this->index(i));
+        return const_reference(this->m_offset, this->index(i), n_Vla::VlaKey{});
     }
     rvalue operator [] (size_type i) &&
     {
@@ -1518,7 +1544,7 @@ class Vla : private Vla_impl<Tp, dim>
 
     const_iterator cbegin() const &
     {
-        return const_iterator(const_pointer(this->i_offset, this->i_data));
+        return const_iterator(this->m_offset, this->m_data, n_Vla::VlaKey{});
     }
     const_iterator begin() const &
     {
@@ -1526,12 +1552,14 @@ class Vla : private Vla_impl<Tp, dim>
     }
     iterator begin() &
     {
-        return iterator(pointer(this->i_offset, this->i_data));
+        return iterator(this->m_offset, this->m_data);
     }
 
     const_iterator cend() const &
     {
-        return const_iterator(const_pointer(this->i_offset, this->i_data + this->i_offset[dim]));
+        return const_iterator(this->m_offset, 
+                              this->m_data + this->m_offset[dim],
+                              n_Vla::VlaKey{});
     }
     const_iterator end() const &
     {
@@ -1539,7 +1567,8 @@ class Vla : private Vla_impl<Tp, dim>
     }
     iterator end() &
     {
-        return iterator(pointer(this->i_offset, this->i_data + this->i_offset[dim]));
+        return iterator(this->m_offset, this->m_data + this->m_offset[dim],
+                        n_Vla::VlaKey{});
     }
 
     const_reverse_iterator crbegin() const &
@@ -1592,8 +1621,6 @@ class Vla<Tp, 1> : private Vla_impl<Tp, 1>
     using ArgsBase = VlaArgHelper<Tp, dim>;
 
   public:
-    using typename Impl::Vla_base;
-    using typename Base::size_type;
     using value_type                 =    Tp;
     using const_reference            =    const Tp&;
     using reference                  =    Tp&;
@@ -1601,18 +1628,31 @@ class Vla<Tp, 1> : private Vla_impl<Tp, 1>
     using pointer                    =    RelaxedPtr<Tp>;
     using const_rvalue               =    const Tp&&;
     using rvalue                     =    Tp&&;
-    using const_iterator             =    Iterator_wrapper<const_pointer, Vla>;
-    using iterator                   =    Iterator_wrapper<pointer, Vla>;
+    using const_iterator             =    BasicIterator<const_pointer, Vla>;
+    using iterator                   =    BasicIterator<pointer, Vla>;
     using const_reverse_iterator     =    std::reverse_iterator<const_iterator>;
     using reverse_iterator           =    std::reverse_iterator<iterator>;
 
-    using size_list_t                = typename ArgsBase::size_list_t;
-    using value_initializer          = typename ArgsBase::value_initializer;
-    using initializer_list           = typename ArgsBase::initializer_list;
+    using typename Impl::VlaBase;
+    using typename Base::size_type;
+
+    using size_list_t                =    typename ArgsBase::size_list_t;
+    using value_initializer          =    typename ArgsBase::value_initializer;
+    using initializer_list           =    typename ArgsBase::initializer_list;
 
 
 
     Vla() = default;
+    Vla(const Vla&) = default;
+    Vla(Vla&&) noexcept = default;
+
+    Vla& operator = (const Vla&) & = default;
+    Vla& operator = (Vla&&) & noexcept = default;
+
+    friend void swap(Vla &a, Vla &b) noexcept
+    {
+        return swap(static_cast<Impl&>(a), static_cast<Impl&>(b));
+    }
 
     Vla(size_type s) : Impl(size_list_t{s}) {}
 
@@ -1621,16 +1661,6 @@ class Vla<Tp, 1> : private Vla_impl<Tp, 1>
 
     Vla(initializer_list init_list) : Impl(init_list) {}
 
-    Vla(Vla&&) noexcept = default;
-    Vla(const Vla&) = default;
-
-    Vla& operator = (Vla&&) & noexcept = default;
-    Vla& operator = (const Vla&) & = default;
-
-    friend void swap(Vla &a, Vla &b) noexcept
-    {
-        return swap(static_cast<Impl&>(a), static_cast<Impl&>(b));
-    }
 
 
     using Base::size;
@@ -1643,49 +1673,49 @@ class Vla<Tp, 1> : private Vla_impl<Tp, 1>
 
     reference operator [] (size_type i) &
     {
-        return this->i_data[i];
+        return this->m_data[i];
     }
     const_reference operator [] (size_type i) const &
     {
-        return this->i_data[i];
+        return this->m_data[i];
     }
     rvalue operator [] (size_type i) &&
     {
-        return static_cast<rvalue>(this->i_data[i]);
+        return static_cast<rvalue>(this->m_data[i]);
     }
     const_rvalue operator [] (size_type i) const &&
     {
-        return static_cast<const_rvalue>(this->i_data[i]);
+        return static_cast<const_rvalue>(this->m_data[i]);
     }
 
 
     reference operator () (size_type i) &
     {
-        return this->i_data[i];
+        return this->m_data[i];
     }
     const_reference operator () (size_type i) const &
     {
-        return this->i_data[i];
+        return this->m_data[i];
     }
     rvalue operator () (size_type i) &&
     {
-        return static_cast<rvalue>(this->i_data[i]);
+        return static_cast<rvalue>(this->m_data[i]);
     }
     const_rvalue operator () (size_type i) const &&
     {
-        return static_cast<const_rvalue>(this->i_data[i]);
+        return static_cast<const_rvalue>(this->m_data[i]);
     }
 
 
     reference at (size_type i) &
     {
         this->range_check(i);
-        return this->i_data[i];
+        return this->m_data[i];
     }
     const_reference at (size_type i) const &
     {
         this->range_check(i);
-        return this->i_data[i];
+        return this->m_data[i];
     }
     rvalue at (size_type i) &&
     {
@@ -1700,7 +1730,7 @@ class Vla<Tp, 1> : private Vla_impl<Tp, 1>
 
     const_iterator cbegin() const &
     {
-        return const_iterator(this->i_data);
+        return const_iterator(this->m_data);
     }
     const_iterator begin() const &
     {
@@ -1708,12 +1738,12 @@ class Vla<Tp, 1> : private Vla_impl<Tp, 1>
     }
     iterator begin() &
     {
-        return iterator(this->i_data);
+        return iterator(this->m_data);
     }
 
     const_iterator cend() const &
     {
-        return const_iterator(this->i_data + this->i_offset[dim]);
+        return const_iterator(this->m_data + this->m_offset[dim]);
     }
     const_iterator end() const &
     {
@@ -1721,7 +1751,7 @@ class Vla<Tp, 1> : private Vla_impl<Tp, 1>
     }
     iterator end() &
     {
-        return iterator(this->i_data + this->i_offset[dim]);
+        return iterator(this->m_data + this->m_offset[dim]);
     }
 
     const_reverse_iterator crbegin() const &
