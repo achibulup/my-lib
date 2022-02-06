@@ -39,6 +39,29 @@ struct IterTraits
 };
 } // namespace n_Iterator
 
+
+///a template for writing iterator wrappers
+///used for writing an iterator wrapper class that behave like the underlying iterator
+///you can inherit from this template, using the curiously recurring template pattern
+///then this class will behave like the underlying iterator
+///and you can override any behavior you want, creating iterator adapters
+
+///usage example: assume you want to write a move iterator adapter for std::vector<int>::iterator
+///class MoveIterator : public IteratorWrapper<MoveIterator, std::vector<int>::iterator>
+///{
+///    using Base = IteratorWrapper<MoveIterator, std::vector<int>::iterator>;
+///    make your own constructor
+///    MoveIterator(std::vector<int>::iterator iter) : Base(iter) {}
+///    override the dereference operator
+///    int&& operator*() const noexcept 
+///    {
+///        return std::move(Base::operator*()); 
+///    }
+///    ...
+///    all other behaviors are inherited from the underlying iterator
+///};
+
+
 template<typename Iter, typename Base>
 class IteratorWrapper
 {
@@ -264,6 +287,19 @@ noexcept(noexcept(Iter{std::move(iter -= dist)}))
     iter -= dist;
     return iter;
 }
+
+
+/// a template for writing iterator wrapper for containers (usually wraps normal pointers)
+/// all properties of the iterator are inherited from the base iterator
+/// example: implementing std::vector<T>
+/// template<typename T>
+/// class vector
+/// {
+///     using pointer = T*; 
+///     using iterator = BasicIterator<pointer, vector>;
+///     using const_iterator = BasicIterator<const pointer, vector>;
+///     ...
+///};
 
 
 template<typename Base, typename Container>
