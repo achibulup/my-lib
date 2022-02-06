@@ -155,7 +155,6 @@ const AnyTypeManagerStructure AnyTypeManager<Tp>::manager;
 } //namespace n_Any_helper
 
 
-
 class Any
 {
   public:
@@ -281,89 +280,58 @@ class Any
     }
 
 
+    
+    template<typename Tp>
+    Tp cast() &
+    {
+        return this->refCast<remove_const_ref_t<Tp>>();
+    }
+    template<typename Tp>
+    Tp cast() const &
+    {
+        return this->refCast<remove_const_ref_t<Tp>>();
+    }
+    template<typename Tp>
+    Tp cast() &&
+    {
+        return std::move(this->refCast<remove_const_ref_t<Tp>>());
+    }
+    template<typename Tp>
+    Tp cast() const &&
+    {
+        return std::move(this->refCast<remove_const_ref_t<Tp>>());
+    }
     // template<typename Tp>
-    // explicit operator Tp () &
+    // friend Tp AnyCast(Any *any) noexcept
     // {
-    //     return this->operator Tp&();
+    //     return any->ptrCast<remove_const_ptr_ref_t<Tp>>();
     // }
+    // template<typename Tp>
+    // friend Tp AnyCast(const Any *any) noexcept
+    // {
+    //     return any->ptrCast<remove_const_ptr_ref_t<Tp>>();
+    // }
+
+
     template<typename Tp>
     explicit operator Tp& () &
     {
-        return this->refCast<remove_const_ref_t<Tp>>();
+        return this->cast<Tp&>();
     }
-
-    // template<typename Tp>
-    // explicit operator Tp () const &
-    // {
-    //     return this->operator Tp&();
-    // }
     template<typename Tp>
     explicit operator const Tp& () const &
     {
-        return this->refCast<remove_const_ref_t<Tp>>();
+        return this->cast<const Tp&>();
     }
-
-    // template<typename Tp>
-    // explicit operator Tp () &&
-    // {
-    //     return std::move(*this).operator Tp&&();
-    // }
     template<typename Tp>
     explicit operator Tp&& () &&
     {
-        return std::move(this->operator Tp&());
+        return std::move(this->cast<Tp&>());
     }
-    // template<typename Tp>
-    // explicit operator const Tp& () &&
-    // {
-    //     return std::move(*this).operator Tp&&();
-    // }
-
-    // template<typename Tp>
-    // explicit operator Tp () const &&
-    // {
-    //     return std::move(*this).operator Tp&&();
-    // }
     template<typename Tp>
     explicit operator const Tp&& () const &&
     {
-        return std::move(this->operator const Tp&());
-    }
-    // template<typename Tp>
-    // explicit operator const Tp& () const &&
-    // {
-    //     return std::move(*this).operator Tp&&();
-    // }
-
-    // template<typename Tp>
-    // explicit operator Tp&& () & = delete;
-    // template<typename Tp>
-    // explicit operator Tp&& () const & = delete;
-    // template<typename Tp>
-    // explicit operator Tp& () && = delete;
-    // template<typename Tp>
-    // explicit operator Tp& () const && = delete;
-
-    
-    template<typename Tp>
-    friend Tp AnyCast(Any &any)
-    {
-        return static_cast<Tp&>(any);
-    }
-    template<typename Tp>
-    friend Tp AnyCast(const Any &any)
-    {
-        return static_cast<const Tp&>(any);
-    }
-    template<typename Tp>
-    friend Tp AnyCast(Any &&any)
-    {
-        return static_cast<Tp&&>(std::move(any));
-    }
-    template<typename Tp>
-    friend Tp AnyCast(const Any &&any)
-    {
-        return static_cast<const Tp&&>(std::move(any));
+        return std::move(this->cast<const Tp&>());
     }
 
 
@@ -426,7 +394,7 @@ class Any
 
     friend std::ostream& operator << (std::ostream &os, const Any &any)
     {
-        if (any != any.null) 
+        if (!any.empty()) 
           any.m_manager->formatTo(os, any.m_buffer.data());
         return os;
     }
@@ -535,16 +503,6 @@ const Any Any::null;
 
 
 
-template<typename Tp>
-inline Tp AnyCast(Any *any) noexcept
-{
-    return any->ptrCast<remove_const_ptr_ref_t<Tp>>();
-}
-template<typename Tp>
-inline Tp AnyCast(const Any *any) noexcept
-{
-    return any->ptrCast<remove_const_ptr_ref_t<Tp>>();
-}
 
 
 
