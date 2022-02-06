@@ -82,9 +82,9 @@ constexpr size_t max_align() noexcept
 void throw_inactive_member_exception(string_view access, string_view cur_active)
 {
     if (cur_active[0] == '-')
-      throw std::logic_error(string_format(
+      throw std::logic_error(stringFormat(
         "attempt to access inactive member : ",access," (the union is currently empty)"));
-    throw std::logic_error(string_format(
+    throw std::logic_error(stringFormat(
         "attempt to access inactive member : ",access," (the current active member is : ",cur_active));
 }
 
@@ -529,7 +529,7 @@ class SafeUnion<std::pair<Types, Names>...>
         return this->current == &MemberManager<Name>::instance;
     }
 
-    string_view active_member() const noexcept
+    string_view activeMember() const noexcept
     {
         if (!this->current) return "--";
         return this->current->name;
