@@ -590,6 +590,139 @@ class Polynomial
         return res;
     }
 
+
+    template<typename istr>
+    friend istr&& operator >> (istr &&is, Polynomial &poly)
+    {
+#define return_early return std::forward<istr>(is)
+#define failure_return {poly = {}; is.setstate(is.failbit); return_early;}
+        static constexpr int name_len = var_name::size();
+        poly = {};
+        if (!is) failure_return;
+        ignoreVoid(is);
+        if (is.peek() == is.eof()) failure_return;
+        char entry = is.peek();
+        if (entry == '(') {
+          is.get();
+          int peek = ignoreVoid(is).peek();
+          if (peek == is.eof() || static_cast<char>(peek) == ')')
+            failure_return;
+        }
+        //multi-term input has to be enclosed by parentheses
+        //single-term input should have no space between the coef and the exp notation
+
+        Tp current_coef;
+
+        /*first term*/{
+          ignoreVoid(is);
+          bool neg = (is.peek() != is.eof() && static_cast<char>(is.peek()) == '-');
+          if (neg) is.get();
+          bool check_var = tryGetVar(is, var_name{}, name_len);
+          if (check_var) current_coef = lit1;
+          else {
+            if(neg) is.unget();
+            if (!(is >> current_coef)) failure_return;
+          }
+          if (check_var && neg) current_coef = -current_coef;
+
+          int deg = 0;
+          if (!check_var) {
+            if (entry == '(') ignoreVoid(is);
+            if (entry == '(' || !nextIsVoid(is)) {
+              if (!check_var) check_var = tryGetVar(is, var_name{}, name_len);
+              if (entry != '(' && !check_var) failure_return;
+            }
+          }
+          if (check_var) {    
+            deg = 1;
+
+            if (entry == '(') ignoreVoid(is);
+            if (entry == '(' || !nextIsVoid(is)) {
+            int peek = is.peek();
+            bool is_exp = peek != is.eof() && static_cast<char>(peek) == '^';
+            if (entry != '(' && !is_exp) failure_return;
+            if (is_exp) {
+              is.get();
+
+              if (entry == '(') ignoreVoid(is);
+              else if (!nextIsVoid(is)) failure_return;
+              if (!(is >> deg)) failure_return;
+            }
+            }
+          }
+
+          poly.set(deg, current_coef + poly[deg]);
+        }/*first term*/
+
+        if (entry == '(') while(true) {
+          ignoreVoid(is);
+          int peek = is.peek();
+          if (peek == is.eof()) failure_return;
+          char sign = peek;
+          if (sign == ')') {
+            is.get();
+            break;
+          }
+
+          if (sign != '+' && sign != '-') failure_return;
+          is.get();
+
+          ignoreVoid(is);
+          bool check_var = tryGetVar(is, var_name{}, name_len);
+          if (check_var) current_coef = lit1;
+          else if (!(is >> current_coef)) failure_return;
+          if (sign == '-') current_coef = -current_coef;
+
+          int deg = 0;
+          ignoreVoid(is);
+          if (check_var || tryGetVar(is, var_name{}, name_len)) {
+            deg = 1;
+
+            ignoreVoid(is);
+            peek = is.peek();
+            if (peek != is.eof() && static_cast<char>(peek) == '^') {
+                is.get();
+                
+                ignoreVoid(is);
+                if (!(is >> deg)) failure_return;
+            }
+          }
+                
+          poly.set(deg, current_coef + poly[deg]);
+        }
+        return std::forward<istr>(is);
+#undef return_early
+#undef failure_return
+    }
+
+    template<typename ostr>
+    friend decltype((std::declval<ostr&>() << std::declval<std::string>()),
+                    std::declval<ostr>())
+    operator << (ostr &&os, Polynomial poly)
+    {
+        if (!poly) return (os << "0"), os;
+        {
+          Tp coef = poly[poly.degree()];
+          if (coef < 0) {
+            os << "-";
+            coef = -coef;
+          }
+          os << termStr(var_name{}, coef, poly.degree());
+        }
+        for(int i = poly.degree() - 1; i >= 0; --i) 
+          if (poly[i]) {
+            os << " ";
+            Tp coef = poly[i];
+            if (poly[i] < 0) {
+              os << "- ";
+              coef = -coef;
+            } 
+            else os << "+ ";
+            os << termStr(var_name{}, coef, i);
+          }
+        return std::forward<ostr>(os);
+    }
+
   private:
     static void divide(const Polynomial &lhs, const Polynomial &rhs,
                        Polynomial &quotient, Polynomial &remainder)
@@ -622,6 +755,19 @@ class Polynomial
         }
     }
 
+    template<typename Tp>
+    static std::string termStr(const char *var, Tp val, int deg)
+    {
+        std::ostringstream res;
+        if (val == 1 && deg > 0) {}
+        else {
+          if (deg > 0) res << parenthesized(val);
+          else res << val;
+        }
+        if (deg > 0) res << var;
+        if (deg > 1) res << "^" << deg;
+        return res.str();
+    }
 
     void trim_zero() 
     {
@@ -792,149 +938,6 @@ bool tryGetVar(istr &is, const char *var_name, int len)
     return true;
 }
 
-template<typename istr, typename Tp, typename var_name, 
-         typename = decltype(std::declval<istr&>() >> std::declval<char*>())>
-istr&& operator >> (istr &&is, Polynomial<Tp, var_name> &poly)
-{
-#define return_early return std::forward<istr>(is)
-#define failure_return {poly = {}; is.setstate(is.failbit); return_early;}
-    static constexpr int name_len = var_name::size();
-    poly = {};
-    if (!is) failure_return;
-    ignoreVoid(is);
-    if (is.peek() == is.eof()) failure_return;
-    char entry = is.peek();
-    if (entry == '(') {
-      is.get();
-      int peek = ignoreVoid(is).peek();
-      if (peek == is.eof() || static_cast<char>(peek) == ')')
-        failure_return;
-    }
-    //multi-term input has to be enclosed by parentheses
-    //single-term input should have no space between the coef and the exp notation
-
-    Tp current_coef;
-
-    /*first term*/{
-      ignoreVoid(is);
-      bool neg = (is.peek() != is.eof() && static_cast<char>(is.peek()) == '-');
-      if (neg) is.get();
-      bool check_var = tryGetVar(is, var_name{}, name_len);
-      if (check_var) current_coef = lit1;
-      else {
-        if(neg) is.unget();
-        if (!(is >> current_coef)) failure_return;
-      }
-      if (check_var && neg) current_coef = -current_coef;
-
-      int deg = 0;
-      if (!check_var) {
-        if (entry == '(') ignoreVoid(is);
-        if (entry == '(' || !nextIsVoid(is)) {
-          if (!check_var) check_var = tryGetVar(is, var_name{}, name_len);
-          if (entry != '(' && !check_var) failure_return;
-        }
-      }
-      if (check_var) {    
-        deg = 1;
-
-        if (entry == '(') ignoreVoid(is);
-        if (entry == '(' || !nextIsVoid(is)) {
-        int peek = is.peek();
-        bool is_exp = peek != is.eof() && static_cast<char>(peek) == '^';
-        if (entry != '(' && !is_exp) failure_return;
-        if (is_exp) {
-          is.get();
-
-          if (entry == '(') ignoreVoid(is);
-          else if (!nextIsVoid(is)) failure_return;
-          if (!(is >> deg)) failure_return;
-        }
-        }
-      }
-
-      poly.set(deg, current_coef + poly[deg]);
-    }/*first term*/
-
-    if (entry == '(') while(true) {
-      ignoreVoid(is);
-      int peek = is.peek();
-      if (peek == is.eof()) failure_return;
-      char sign = peek;
-      if (sign == ')') {
-        is.get();
-        break;
-      }
-
-      if (sign != '+' && sign != '-') failure_return;
-      is.get();
-
-      ignoreVoid(is);
-      bool check_var = tryGetVar(is, var_name{}, name_len);
-      if (check_var) current_coef = lit1;
-      else if (!(is >> current_coef)) failure_return;
-      if (sign == '-') current_coef = -current_coef;
-
-      int deg = 0;
-      ignoreVoid(is);
-      if (check_var || tryGetVar(is, var_name{}, name_len)) {
-        deg = 1;
-
-        ignoreVoid(is);
-        peek = is.peek();
-        if (peek != is.eof() && static_cast<char>(peek) == '^') {
-            is.get();
-            
-            ignoreVoid(is);
-            if (!(is >> deg)) failure_return;
-        }
-      }
-            
-      poly.set(deg, current_coef + poly[deg]);
-    }
-    return std::forward<istr>(is);
-#undef return_early
-#undef failure_return
-}
-template<typename Tp>
-std::string termStr(const char *var, Tp val, int deg)
-{
-    std::ostringstream res;
-    if (val == 1 && deg > 0) {}
-    else {
-      if (deg > 0) res << parenthesized(val);
-      else res << val;
-    }
-    if (deg > 0) res << var;
-    if (deg > 1) res << "^" << deg;
-    return res.str();
-}
-template<typename ostr, typename Tp, typename var_name, 
-         typename=decltype(std::declval<ostr&>()<<std::declval<const char*>())>
-ostr&& operator << (ostr &&os, Polynomial<Tp, var_name> poly)
-{
-    if (!poly) return (os << "0"), os;
-    {
-      Tp coef = poly[poly.degree()];
-      if (coef < 0) {
-        os << "-";
-        coef = -coef;
-      }
-      os << termStr(var_name{}, coef, poly.degree());
-    }
-    for(int i = poly.degree() - 1; i >= 0; --i) 
-      if (poly[i]) {
-        os << " ";
-        Tp coef = poly[i];
-        if (poly[i] < 0) {
-          os << "- ";
-          coef = -coef;
-        } 
-        else os << "+ ";
-        os << termStr(var_name{}, coef, i);
-      }
-    return std::forward<ostr>(os);
-}
 template<typename ostr, typename Tp, typename var_name, typename = decltype(
              std::declval<ostr&>().operator << (std::declval<const char*>()))>
 ostr&& operator << (ostr &&os, PolynomialLiteral<Tp, var_name> poly)
