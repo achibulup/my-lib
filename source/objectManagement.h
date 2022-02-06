@@ -10,6 +10,8 @@ using std::byte;
 using byte = unsigned char;
 #endif
 
+
+#if ACHIBULUP_Cpp17_prior
 template<typename Tp>
 inline constexpr Tp* Launder(Tp *ptr) noexcept
 {
@@ -426,6 +428,12 @@ class RelaxedPtr<const void>
     alias_pointer i_ptr;
 };
 
+#else //ACHIBULUP_Cpp17_prior
+
+template<typename Tp>
+using RelaxedPtr = Tp*;
+
+#endif //ACHIBULUP_Cpp17_prior
 
 template<typename Tp>
 inline RelaxedPtr<Tp> newBuffer(size_t s)
