@@ -85,6 +85,11 @@ class RefPtr
 
     RefPtr(const RefPtr &other) noexcept
     : RefPtr(other.m_value_ptr, other.m_instance_ptr) {}
+    RefPtr(RefPtr &&other) noexcept
+    : RefPtr() 
+    { 
+        swap(*this, other); 
+    }
 
     RefPtr& operator = (RefPtr other) & noexcept
     {
@@ -202,13 +207,11 @@ class Ref
   public:
     constexpr Ref(NullRef) noexcept : m_shared() {}
 
-    Ref(const Ref &other) noexcept : m_shared(other.m_shared) {}
+    Ref(const Ref &other) noexcept = default;
+    Ref(Ref &&other) noexcept = default;
     
-    Ref& operator = (Ref other) & noexcept
-    {
-        swap(*this, other);
-        return *this;
-    }
+    Ref& operator = (const Ref &other) & = default;
+    Ref& operator = (Ref &&other) & = default;
 
     friend void swap(Ref &a, Ref &b) noexcept
     {
@@ -221,6 +224,10 @@ class Ref
          && std::is_constructible<Tp, Args...>::value> = 0>
     explicit Ref(Args&& ...args) 
     : m_shared(n_Ref::makeInstance<Tp>(std::forward<Args>(args)...)) {}
+    explicit Ref(const Tp &value)
+    : m_shared(n_Ref::makeInstance<Tp>(value)) {}
+    explicit Ref(Tp &&value) 
+    : m_shared(n_Ref::makeInstance<Tp>(std::move(value))) {}
 
     template<typename Up, EnableIf_t<std::is_convertible<Up*, Tp*>::value> = 0>
     Ref(const Ref<Up> &other) noexcept : m_shared(other.ptr()) {}

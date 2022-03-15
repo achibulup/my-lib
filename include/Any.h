@@ -225,12 +225,19 @@ class Any
           swap(*this, tmp);
         }
     }
-
     template<typename Tp,
             EnableIf_t<!std::is_same<decay_t<Tp>, Any>::value>* = nullptr>
     void emplace(Tp &&val) &
     {
         this->emplace<decay_t<Tp>, true>(std::forward<Tp>(val));
+    }
+
+    template<typename Tp,
+            EnableIf_t<std::is_same<Tp, decay_t<Tp>>::value>* = nullptr,
+            EnableIf_t<!std::is_same<Tp, Any>::value>* = nullptr>
+    void emplace(const Typeof<Tp> &val) &
+    {
+        this->emplace<Tp, true>(val);
     }
     template<typename Tp,
             EnableIf_t<std::is_same<Tp, decay_t<Tp>>::value>* = nullptr,
@@ -239,6 +246,7 @@ class Any
     {
         this->emplace<Tp, true>(std::forward<Tp>(val));
     }
+
 
 
     template<typename Tp0,  

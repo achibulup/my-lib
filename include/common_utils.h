@@ -259,7 +259,7 @@ std::string to_string(Tp &&x)
 {
     return std::forward<Tp>(x);
 }
-void stringFormatHelper(std::ostringstream& result) {}
+void stringFormatHelper(std::ostringstream&) {}
 template<typename Tp, typename ...Args>
 void stringFormatHelper(std::ostringstream& result, 
                           const Tp &first, const Args& ...args)
