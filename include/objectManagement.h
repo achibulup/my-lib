@@ -11,6 +11,17 @@ using byte = unsigned char;
 #endif
 
 
+struct ByteSpan
+{
+    byte *ptr;
+    std::size_t size;
+
+    ByteSpan() noexcept : ptr(nullptr), size(0) {}
+    ByteSpan(void *ptr, std::size_t size) noexcept 
+    : ptr(static_cast<byte*>(ptr)), size(size) {}
+};
+
+
 #if ACHIBULUP_Cpp17_prior
 template<typename Tp>
 inline constexpr Tp* Launder(Tp *ptr) noexcept
