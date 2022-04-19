@@ -1,14 +1,14 @@
 #ifndef VLA_H_INCLUDED
 #define VLA_H_INCLUDED
+#include "Iterator_wrapper.h"
+#include "common_utils.h"
+#include "objectManagement.h"
 #include <new>
 #include <array>
 #include <iterator>
 #include <exception>
 #include <type_traits>
 #include <initializer_list>
-#include "Iterator_wrapper.h"
-#include "common_utils.h"
-#include "objectManagement.h"
 namespace Achibulup
 {
 
@@ -1050,7 +1050,7 @@ struct VlaListInitHelper
           VlaListInitHelper<Tp, dim - 1>::construct(pos, sub.m_data, dimensions);
           pos += dimensions[dim - 1];
         }
-        constructor<Tp>::construct(en - pos, pos);
+        Achibulup::construct(en - pos, pos);
     }
 };
 template<typename Tp, std::size_t dim>
@@ -1060,13 +1060,13 @@ struct VlaListInitHelper<Tp, dim, false>
 
     static void construct(RelaxedPtr<Tp> pos, initializer_list init_list, const size_t *dimensions)
     {
-        typename constructor<Tp>::exception_safety p{pos, pos};
+        typename Constructor<Tp>::exception_safety p{pos, pos};
         RelaxedPtr<Tp> en = pos + dimensions[dim];
         for(auto &sub : init_list){
           VlaListInitHelper<Tp, dim - 1>::construct(p.last, sub.m_data, dimensions);
           p.last += dimensions[dim - 1];
         }
-        constructor<Tp>::construct(en - p.last, p.last);
+        Achibulup::construct(en - p.last, p.last);
         p.last = p.first;
     }
 };
@@ -1077,8 +1077,8 @@ struct VlaListInitHelper<Tp, 1, true>
 
     static void construct(RelaxedPtr<Tp> pos, initializer_list init_list, const size_t *dimensions)
     {
-        constructor<Tp>::copy_construct(init_list.size(), pos, init_list.begin());
-        constructor<Tp>::construct(dimensions[1] - init_list.size(), pos + init_list.size());
+        Achibulup::copyConstruct(init_list.size(), pos, init_list.begin());
+        Achibulup::construct(dimensions[1] - init_list.size(), pos + init_list.size());
     }
 };
 template<typename Tp>
@@ -1088,10 +1088,10 @@ struct VlaListInitHelper<Tp, 1, false>
 
     static void construct(RelaxedPtr<Tp> pos, initializer_list init_list, const size_t *dimensions)
     {
-        typename constructor<Tp>::exception_safety p{pos, pos};
-        constructor<Tp>::copy_construct(init_list.size(), pos, init_list.begin());
+        typename Constructor<Tp>::exception_safety p{pos, pos};
+        Achibulup::copyConstruct(init_list.size(), pos, init_list.begin());
         p.last += init_list.size();
-        constructor<Tp>::construct(dimensions[1] - init_list.size(), pos + init_list.size());
+        Achibulup::construct(dimensions[1] - init_list.size(), pos + init_list.size());
         p.last = p.first;
     }
 };
@@ -1157,7 +1157,7 @@ struct VlaArgHelper<Tp, 0>
 
 
 template<typename Tp, std::size_t dim>
-class Vla_impl : protected VlaBase<Tp, dim>
+class VlaImpl : protected VlaBase<Tp, dim>
 {
   protected:
     using Base = VlaBase<Tp, dim>;
@@ -1171,53 +1171,53 @@ class Vla_impl : protected VlaBase<Tp, dim>
     using value_initializer = typename VlaArgHelper<Tp, dim>::value_initializer;
     using initializer_list  = typename VlaArgHelper<Tp, dim>::initializer_list;
 
-    Vla_impl() noexcept : i_offset_base{1}
+    VlaImpl() noexcept : i_offset_base{1}
     {
         this->init();
     }
 
-    Vla_impl(const Vla_impl &cpy) : i_offset_base(cpy.i_offset_base)
+    VlaImpl(const VlaImpl &cpy) : i_offset_base(cpy.i_offset_base)
     {
         this->copy(cpy.m_data, cpy.m_offset[dim]);
     }
-    Vla_impl(Vla_impl &&mov) noexcept : Vla_impl()
+    VlaImpl(VlaImpl &&mov) noexcept : VlaImpl()
     {
         swap(*this, mov);
     }
 
-    Vla_impl& operator = (Vla_impl other) noexcept
+    VlaImpl& operator = (VlaImpl other) noexcept
     {
         swap(*this, other);
         return *this;
     }
 
-    friend void swap(Vla_impl &a, Vla_impl &b) noexcept
+    friend void swap(VlaImpl &a, VlaImpl &b) noexcept
     {
         using std::swap;
         swap(a.m_data, b.m_data);
         swap(a.i_offset_base, b.i_offset_base);
     }
 
-    ~Vla_impl()
+    ~VlaImpl()
     {
         if (this->m_data != data_ptr_t()){
-            destructor<Tp>::destroy(this->m_data, this->m_offset[dim]);
+            Achibulup::destroy(this->m_data, this->m_offset[dim]);
             deleteBuffer(this->m_data);
         }
     }
 
 
-    Vla_impl(const size_list_t &size_list) 
+    VlaImpl(const size_list_t &size_list) 
     : i_offset_base(calc_offset(size_list))
     {
         this->init(this->i_offset_base[dim]);
     }
-    Vla_impl(const value_initializer &init) 
+    VlaImpl(const value_initializer &init) 
     : i_offset_base(calc_offset(init))
     {
         this->init(this->i_offset_base[dim], init.value);
     }
-    Vla_impl(initializer_list init_list)
+    VlaImpl(initializer_list init_list)
     : i_offset_base(calc_offset(init_list))
     {
         this->init(this->i_offset_base[dim], init_list);
@@ -1379,7 +1379,7 @@ class Vla_impl : protected VlaBase<Tp, dim>
         set_offset_ptr();
         safe_arr safe{newBuffer<Tp>(len)};
         this->m_data = safe.ptr;
-        constructor<Tp>::construct(len, this->m_data);
+        Achibulup::construct(len, this->m_data);
         safe.ptr = nullptr;
     }
     void init(size_type len, const Tp &value) &
@@ -1387,7 +1387,7 @@ class Vla_impl : protected VlaBase<Tp, dim>
         set_offset_ptr();
         safe_arr safe{newBuffer<Tp>(len)};
         this->m_data = safe.ptr;
-        constructor<Tp>::construct(len, this->m_data, value);
+        Achibulup::construct(len, this->m_data, value);
         safe.ptr = nullptr;
     }
     void init(size_type len, initializer_list init_list) &
@@ -1404,7 +1404,7 @@ class Vla_impl : protected VlaBase<Tp, dim>
         set_offset_ptr();
         safe_arr safe{newBuffer<Tp>(len)};
         this->m_data = safe.ptr;
-        constructor<Tp>::copy_construct(len, this->m_data, cpy);
+        Achibulup::copyConstruct(len, this->m_data, cpy);
         safe.ptr = nullptr;
     }
 
@@ -1435,15 +1435,15 @@ class Vla_impl : protected VlaBase<Tp, dim>
     offset_arr_t i_offset_base;
 };
 template<typename Tp>
-struct Vla_impl<Tp, 0>;
+struct VlaImpl<Tp, 0>;
 
 
 
 template<typename Tp, std::size_t dim>
-class Vla : private Vla_impl<Tp, dim>
+class Vla : private VlaImpl<Tp, dim>
 {
   private:
-    using Impl = Vla_impl<Tp, dim>;
+    using Impl = VlaImpl<Tp, dim>;
     using typename Impl::Base;
     using typename Base::dim_type;
     using ArgsBase = VlaArgHelper<Tp, dim>;
@@ -1609,10 +1609,10 @@ class Vla : private Vla_impl<Tp, dim>
 
 
 template<typename Tp>
-class Vla<Tp, 1> : private Vla_impl<Tp, 1>
+class Vla<Tp, 1> : private VlaImpl<Tp, 1>
 {
   private:
-    using Impl = Vla_impl<Tp, 1>;
+    using Impl = VlaImpl<Tp, 1>;
     using typename Impl::Base;
     using typename Base::dim_type;
 

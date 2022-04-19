@@ -6,6 +6,7 @@
 //Int can handle signed integer while uInt also supports bitwise operations for unsigned integer
 
 
+#include "common_utils.h"
 #include <cmath> //log2
 #include <string> //input
 #include <limits> //unsigned long long max
@@ -15,7 +16,6 @@
 #include <iostream> //in-out put
 #include <algorithm> //max, min
 #include <stdexcept> // exception
-#include "common_utils.h"
 
 namespace Achibulup{
 
@@ -28,7 +28,7 @@ constexpr int ten = 10;
 
 void throw_division_by_zero_exception()
 {
-    throw std::domain_error("division by zero");
+    throw std::domain_error("division by ZERO");
 }
 void throw_unsigned_integer_underflow_exception()
 {
@@ -1197,7 +1197,7 @@ class Int
         *this = val;
     }
 
-    Int(uInt uns) : Int{positive, std::move(uns)} {}
+    Int(uInt uns) : Int{POSITIVE, std::move(uns)} {}
 
     Int(Int&&) noexcept = default;
     Int(const Int&) = default;
@@ -1205,12 +1205,12 @@ class Int
     template<typename intg, n_Int::isIntegral_t<intg> = nullptr>
     Int& operator = (intg val) &
     {
-        sign_type new_sign = positive;
+        Sign new_sign = POSITIVE;
         if (val < 0) {
-          new_sign = negative;
+          new_sign = NEGATIVE;
           val = -val;
         }
-        if (val == 0) this->sign = zero;
+        if (val == 0) this->sign = ZERO;
         else {
           this->m_abs = val;
           this->sign = new_sign;
@@ -1221,29 +1221,36 @@ class Int
     Int& operator = (Int&&) & noexcept = default;
     Int& operator = (const Int&) & = default;
 
+    
+
+    void swap(Int &b) noexcept
+    {
+        using std::swap;
+        this->sign.swap(b.sign);
+        swap(this->m_abs, b.m_abs);
+    }
     friend void swap(Int &a, Int &b) noexcept
     {
-        doSwap(a, b);
+        a.swap(b);
     }
 
 
     template<typename intg, n_Int::isIntegral_t<intg> = nullptr>
     explicit operator intg() const noexcept
     {
-        return static_cast<intg>(this->m_abs) * this->sign;
+        return static_cast<intg>(this->m_abs) * this->sign();
     }
 
     explicit operator bool() const noexcept
     {
-        return this->sign;
+        return this->sign();
     }
 
-    using sign_type = int;
-    static constexpr sign_type zero = 0;
-    static constexpr sign_type positive = 1;
-    static constexpr sign_type negative = -positive;
 
-    ReadOnlyProperty<sign_type, Int> sign;
+    using Sign = int;
+    static constexpr Sign ZERO = 0;
+    static constexpr Sign POSITIVE = 1;
+    static constexpr Sign NEGATIVE = -POSITIVE;
 
 
     friend bool operator == (const Int &lhs, const Int &rhs)
@@ -1258,8 +1265,8 @@ class Int
     {
         if (&lhs == &rhs) return false;
         if (lhs.sign() != rhs.sign()) return lhs.sign() < rhs.sign();
-        if (lhs.sign == positive) return lhs.m_abs < rhs.m_abs;
-        if (lhs.sign == negative) return rhs.m_abs < lhs.m_abs;
+        if (lhs.sign() == POSITIVE) return lhs.m_abs < rhs.m_abs;
+        if (lhs.sign() == NEGATIVE) return rhs.m_abs < lhs.m_abs;
         return false;
     }
     friend bool operator > (const Int &lhs, const Int &rhs)
@@ -1276,13 +1283,17 @@ class Int
     }
 
 
-    friend Int& negate(Int &x)
+    Int& negate()
     {
-        x.doNegate();
-        return x;
+        this->sign = -this->sign();
+        return *this;
     }
 
-
+    friend Int abs(Int x)
+    {
+        if (x.sign() == NEGATIVE) x.negate();
+        return x;
+    }
 
     friend Int operator + (Int x)
     {
@@ -1290,20 +1301,20 @@ class Int
     }
     friend Int operator - (Int x)
     {
-        negate(x);
+        x.negate();
         return x;
     }
 
 
     Int& operator ++ () &
     {
-        if (this->sign == negative) {
+        if (this->sign() == NEGATIVE) {
           --this->m_abs;
           if (!this->m_abs) 
-            this->sign = zero;
+            this->sign = ZERO;
         }else {
           ++this->m_abs;
-          this->sign = positive;
+          this->sign = POSITIVE;
         }
         return *this;
     }
@@ -1315,13 +1326,13 @@ class Int
     }
     Int& operator -- () &
     {
-        if (this->sign == positive) {
+        if (this->sign() == POSITIVE) {
           --this->m_abs;
           if (!this->m_abs) 
-            this->sign = zero;
+            this->sign = ZERO;
         }else {
           ++this->m_abs;
-          this->sign = negative;
+          this->sign = NEGATIVE;
         }
         return *this;
     }
@@ -1336,7 +1347,7 @@ class Int
 
     friend Int operator + (const Int &lhs, const Int &rhs)
     {
-        if(lhs.sign() * rhs.sign() != negative)
+        if(lhs.sign() * rhs.sign() != NEGATIVE)
           return Int{(lhs.sign() ? lhs.sign() : rhs.sign()), 
                       lhs.m_abs + rhs.m_abs};
         if (lhs.m_abs < rhs.m_abs)
@@ -1346,7 +1357,7 @@ class Int
     }
     friend Int operator + (const Int &lhs, Int &&rhs)
     {
-        if(lhs.sign() * rhs.sign() != negative)
+        if(lhs.sign() * rhs.sign() != NEGATIVE)
           return Int{(lhs.sign() ? lhs.sign() : rhs.sign()), 
                       lhs.m_abs + std::move(rhs.m_abs)};
         if (lhs.m_abs < rhs.m_abs)
@@ -1360,7 +1371,7 @@ class Int
     }
     friend Int operator + (Int &&lhs, Int &&rhs)
     {
-        if(lhs.sign() * rhs.sign() != negative)
+        if(lhs.sign() * rhs.sign() != NEGATIVE)
           return Int{(lhs.sign() ? lhs.sign() : rhs.sign()), 
                       std::move(lhs.m_abs) + std::move(rhs.m_abs)};
         if (lhs.m_abs < rhs.m_abs)
@@ -1371,7 +1382,7 @@ class Int
 
     friend Int operator - (const Int &lhs, const Int &rhs)
     {
-        if(lhs.sign() * -rhs.sign() != negative)
+        if(lhs.sign() * -rhs.sign() != NEGATIVE)
           return Int{(lhs.sign() ? +lhs.sign() : -rhs.sign()), 
                       lhs.m_abs + rhs.m_abs};
         if (lhs.m_abs < rhs.m_abs)
@@ -1411,14 +1422,14 @@ class Int
     {
         const char *str = strv.data();
         auto len = strv.size();
-        sign_type new_sign = positive;
+        Sign new_sign = POSITIVE;
         const char* en = str + len;
         if (*str == '-') {
           new_sign = -new_sign;
           ++str;
         }
         this->m_abs.parse(string_view(str, en - str));
-        if (!this->m_abs) this->sign = zero;
+        if (!this->m_abs) this->sign = ZERO;
         else this->sign = new_sign;
         return *this;
     }
@@ -1445,30 +1456,20 @@ class Int
 
     friend std::ostream& operator << (std::ostream &os, const Int &x)
     {
-        if (x.sign() == negative) os << '-';
+        if (x.sign() == NEGATIVE) os << '-';
         os << x.m_abs;
         return os;
     }
 
 
   private:
-    Int(sign_type si, uInt b) noexcept : sign(si * !!b), m_abs(Move(b)) {}
-
-    
-    static void doSwap(Int &a, Int &b) noexcept
-    {
-        using std::swap;
-        a.sign.swap(b.sign);
-        swap(a.m_abs, b.m_abs);
-    }
+    Int(Sign si, uInt b) noexcept : sign(si * !!b), m_abs(Move(b)) {}
 
 
-    void doNegate() &
-    {
-        this->sign = -this->sign();
-    }
+  public:
+    ReadOnlyProperty<Sign, Int> sign;
 
-
+  private:
     uInt m_abs;
 };
 

@@ -44,15 +44,16 @@ using StringFormatter = void(*)(std::ostream&, RelaxedPtr<const void>);
 using EqualComparator = bool(*)(RelaxedPtr<const void>, RelaxedPtr<const void>);
 
 
-
-
+template<typename Tp>
+void CopyCtorFunc(RelaxedPtr<void> dest, RelaxedPtr<const void> src)
+{
+    new (dest) Tp(*static_cast<const Tp*>(src));
+}
 template<typename Tp, 
     EnableIf_t<std::is_convertible<const Tp&, Tp>::value>* = nullptr>
 constexpr CopyCtor getCopyCtorHelper(int) noexcept
 {
-    return +[](RelaxedPtr<void> dest, RelaxedPtr<const void> source) {
-        new (dest) Tp(*static_cast<const Tp*>(source));
-    };
+    return CopyCtorFunc<Tp>;
 }
 template<typename Tp, typename Tp2>
 constexpr CopyCtor getCopyCtorHelper(Tp2) noexcept
@@ -66,29 +67,37 @@ constexpr CopyCtor getCopyCtor() noexcept
 }
 
 template<typename Tp>
+void DestructorFunc(RelaxedPtr<const void> ptr)
+{
+    static_cast<const Tp*>(ptr)->~Tp();
+}
+template<typename Tp>
 constexpr Destructor getDestructor() noexcept
 {
-    return +[](RelaxedPtr<const void> ptr) {
-        using Type = Tp;
-        static_cast<const Type*>(ptr)->~Type();
-    };
+    return DestructorFunc<Tp>;
 }
 
 template<typename Tp>
+void PointerThrowFunc(RelaxedPtr<void> ptr)
+{
+    throw static_cast<Tp*>(ptr);
+}
+template<typename Tp>
 constexpr PointerThrow getPointerThrow() noexcept
 {
-    return +[](RelaxedPtr<void> ptr) {
-        throw static_cast<Tp*>(ptr);
-    };
+    return PointerThrowFunc<Tp>;
 }
 
+template<typename Tp>
+bool EqualComparatorFunc(RelaxedPtr<const void> lhs, RelaxedPtr<const void> rhs)
+{
+    return *static_cast<const Tp*>(lhs) == *static_cast<const Tp*>(rhs);
+}
 template<typename Tp, 
     typename = decltype(std::declval<const Tp&>() == std::declval<const Tp&>())>
 constexpr EqualComparator getEqualComparatorHelper(int) noexcept
 {
-    return +[](RelaxedPtr<const void> lhs, RelaxedPtr<const void> rhs) -> bool {
-        return *static_cast<const Tp*>(lhs) == *static_cast<const Tp*>(rhs);
-    };
+    return EqualComparatorFunc<Tp>;
 }
 template<typename Tp, typename Tp2>
 constexpr EqualComparator getEqualComparatorHelper(Tp2) noexcept
@@ -101,20 +110,26 @@ constexpr EqualComparator getEqualComparator() noexcept
     return getEqualComparatorHelper<Tp>(0);
 }
 
+template<typename Tp>
+void StringFormatterFunc(std::ostream& os, RelaxedPtr<const void> ptr)
+{
+    os << *static_cast<const Tp*>(ptr);
+}
+template<typename Tp>
+void StringFormatterFuncFallBack(std::ostream& os, RelaxedPtr<const void> ptr)
+{
+    os << typeid(Tp).name();
+}
 template<typename Tp, typename = decltype(
             std::declval<std::ostream&>() << std::declval<const Tp&>())>
 constexpr StringFormatter getStringFormatterHelper(int) noexcept
 {
-    return +[](std::ostream &os, RelaxedPtr<const void> obj) {
-        os << *static_cast<const Tp*>(obj);
-    };
+    return StringFormatterFunc<Tp>;
 }
 template<typename Tp, typename Tp2>
 constexpr StringFormatter getStringFormatterHelper(Tp2) noexcept
 {
-    return +[](std::ostream &os, RelaxedPtr<const void>) {
-        os << typeid(Tp).name();
-    };
+    return StringFormatterFuncFallBack<Tp>;
 }
 template<typename Tp>
 constexpr StringFormatter getStringFormatter() noexcept

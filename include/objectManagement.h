@@ -2,27 +2,29 @@
 #define OBJMANAGE_H_INCLUDED
 
 #include "common_utils.h"
+#if ACHIBULUP__Cpp17_later
+#include <cstddef>
+#endif // ACHIBULUP__Cpp17_later
 
 namespace Achibulup{
 #if ACHIBULUP__Cpp17_later
-using std::byte;
+using Byte = std::byte;
 #else
-using byte = unsigned char;
+using Byte = unsigned char;
 #endif
 
 
 struct ByteSpan
 {
-    byte *ptr;
-    std::size_t size;
+    Byte *ptr;
+    size_t size;
 
     ByteSpan() noexcept : ptr(nullptr), size(0) {}
-    ByteSpan(void *ptr, std::size_t size) noexcept 
-    : ptr(static_cast<byte*>(ptr)), size(size) {}
+    ByteSpan(void *ptr, size_t size) noexcept 
+    : ptr(static_cast<Byte*>(ptr)), size(size) {}
 };
 
 
-#if ACHIBULUP_Cpp17_prior
 template<typename Tp>
 inline constexpr Tp* Launder(Tp *ptr) noexcept
 {
@@ -33,11 +35,12 @@ inline constexpr Tp* Launder(Tp *ptr) noexcept
 #endif //ACHIBULUP__Cpp17_later
 }
 
-
+#if ACHIBULUP__Cpp17
 template<typename Tp>
 class RelaxedPtr
 {
     using voidptr = void*;
+    using alias_pointer = Byte*;
 
   public:
     using iterator_category = std::random_access_iterator_tag;
@@ -70,7 +73,7 @@ class RelaxedPtr
 
     constexpr Tp* get() const noexcept
     {
-        return Launder(static_cast<Tp*>(static_cast<voidptr>(this->i_ptr)));
+        return std::launder(static_cast<Tp*>(static_cast<voidptr>(this->i_ptr)));
     }
 
     constexpr explicit operator Tp* () const noexcept
@@ -165,13 +168,13 @@ class RelaxedPtr
     }
 
   private:
-    using alias_pointer = byte*;
     alias_pointer i_ptr;
 };
 template<typename Tp>
 class RelaxedPtr<const Tp>
 {
     using voidptr = const void*;
+    using alias_pointer = const Byte*;
 
   public:
     using iterator_category = std::random_access_iterator_tag;
@@ -207,7 +210,7 @@ class RelaxedPtr<const Tp>
 
     constexpr const Tp* get() const noexcept
     {
-        return Launder(static_cast<const Tp*>
+        return std::launder(static_cast<const Tp*>
             (static_cast<voidptr>(this->i_ptr)));
     }
 
@@ -303,13 +306,14 @@ class RelaxedPtr<const Tp>
     }
 
   private:
-    using alias_pointer = const byte*;
     alias_pointer i_ptr;
 };
 
 template<>
 class RelaxedPtr<void>
 {
+    using alias_pointer = void*;
+
   public:
     RelaxedPtr() noexcept = default;
 
@@ -325,7 +329,7 @@ class RelaxedPtr<void>
     template<typename Tp>
     constexpr Tp* get() const noexcept
     {
-        return Launder(static_cast<Tp*>(this->i_ptr));
+        return std::launder(static_cast<Tp*>(this->i_ptr));
     }
 
     constexpr operator void* () const noexcept
@@ -370,13 +374,14 @@ class RelaxedPtr<void>
     }
 
   private:
-    using alias_pointer = void*;
     alias_pointer i_ptr;
 };
 
 template<>
 class RelaxedPtr<const void>
 {
+    using alias_pointer = const void*;
+
   public:
     RelaxedPtr() noexcept = default;
 
@@ -391,7 +396,7 @@ class RelaxedPtr<const void>
     template<typename Tp, EnableIf_t<std::is_const<Tp>::value>* = nullptr>
     constexpr Tp* get() const noexcept
     {
-        return Launder(static_cast<Tp*>(this->i_ptr));
+        return std::launder(static_cast<Tp*>(this->i_ptr));
     }
 
     constexpr operator const void* () const noexcept
@@ -435,7 +440,6 @@ class RelaxedPtr<const void>
     }
 
   private:
-    using alias_pointer = const void*;
     alias_pointer i_ptr;
 };
 
@@ -447,51 +451,60 @@ using RelaxedPtr = Tp*;
 #endif //ACHIBULUP_Cpp17_prior
 
 template<typename Tp>
-inline RelaxedPtr<Tp> newBuffer(size_t s)
+RelaxedPtr<Tp> newBuffer(size_t s)
 {
     if(s < 0) throw std::bad_alloc();
-    return s ? static_cast<Tp*>(static_cast<void*>(new byte[s * ssizeof<Tp>()])) 
+    return s ? static_cast<Tp*>(static_cast<void*>(new Byte[s * ssizeof<Tp>()])) 
              : nullptr;
 }
 inline RelaxedPtr<void> newBuffer(size_t s)
 {
-    return newBuffer<byte>(s);
+    return newBuffer<Byte>(s);
 }
 template<typename Tp>
-inline void deleteBuffer(RelaxedPtr<Tp> ptr)
+void deleteBuffer(RelaxedPtr<Tp> ptr)
 {
-    delete[] static_cast<const byte*>
+    delete[] static_cast<const Byte*>
         (static_cast<const void*>(ptr));
 }
 
 
 
 template<typename Tp, bool = std::is_trivially_destructible<Tp>::value>
-struct destructor
+struct Destructor
 {
     static void destroy(RelaxedPtr<Tp>) noexcept {}
     static void destroy(RelaxedPtr<Tp>, size_t) noexcept {}
 };
 template<typename Tp>
-struct destructor<Tp, false>
+struct Destructor<Tp, false>
 {
     static void destroy(RelaxedPtr<Tp> pos) noexcept
     {
-        destroy(pos, 1);
+        pos->~Tp();
     }
     static void destroy(RelaxedPtr<Tp> pos, size_t num) noexcept
     {
-        using Type = Tp;
         pos += num;
         for(size_t i = 0; i < num; ++i)
-          (--pos)->~Type();
+          (--pos)->~Tp();
     }
 };
 
+template<typename Tp>
+void destroy(RelaxedPtr<Tp> pos) noexcept
+{
+    Destructor<Tp>::destroy(pos);
+}
+template<typename Tp>
+void destroy(RelaxedPtr<Tp> pos, size_t num) noexcept
+{
+    Destructor<Tp>::destroy(pos, num);
+}
 
 
 template<typename Tp, bool = std::is_trivially_destructible<Tp>::value>
-struct constructor
+struct Constructor
 {
     struct exception_safety{RelaxedPtr<Tp> first, last;};
 
@@ -503,7 +516,7 @@ struct constructor
         new(pos) Tp(std::forward<Args>(args)...);
     }
     template<typename ...Args>
-    static void brace_construct(RelaxedPtr<Tp> pos, Args&& ...args)
+    static void braceConstruct(RelaxedPtr<Tp> pos, Args&& ...args)
     noexcept(noexcept(Tp{std::forward<Args>(args)...}))
     {
         new(pos) Tp{std::forward<Args>(args)...};
@@ -517,14 +530,14 @@ struct constructor
           new(pos++) Tp(args...);
     }
     template<typename ...Args>
-    static void brace_construct(size_t num, RelaxedPtr<Tp> pos, const Args& ...args)
+    static void braceConstruct(size_t num, RelaxedPtr<Tp> pos, const Args& ...args)
     noexcept(noexcept(Tp{args...}))
     {
         for(size_t i = 0; i < num; ++i)
           new(pos++) Tp{args...};
     }
 
-    static void copy_construct(size_t num, RelaxedPtr<Tp> pos, RelaxedPtr<const Tp> source)
+    static void copyConstruct(size_t num, RelaxedPtr<Tp> pos, RelaxedPtr<const Tp> source)
     noexcept(std::is_nothrow_copy_constructible<Tp>::value)
     {
         for(size_t i = 0; i < num; ++i){
@@ -532,7 +545,7 @@ struct constructor
           ++source;
         }
     }
-    static void move_construct(size_t num, RelaxedPtr<Tp> pos, RelaxedPtr<Tp> source)
+    static void moveConstruct(size_t num, RelaxedPtr<Tp> pos, RelaxedPtr<Tp> source)
     noexcept(std::is_nothrow_move_constructible<Tp>::value)
     {
         for(size_t i = 0; i < num; ++i){
@@ -543,7 +556,7 @@ struct constructor
 };
 
 template<typename Tp>
-struct constructor<Tp, false>
+struct Constructor<Tp, false>
 {
     struct exception_safety
     {
@@ -551,7 +564,7 @@ struct constructor<Tp, false>
         ~exception_safety()
         {
             while(last != first)
-              destructor<Tp>::destroy(--last);
+              Destructor<Tp>::destroy(--last);
         }
     };
 
@@ -563,7 +576,7 @@ struct constructor<Tp, false>
         new(pos) Tp(std::forward<Args>(args)...);
     }
     template<typename ...Args>
-    static void brace_construct(RelaxedPtr<Tp> pos, Args&& ...args)
+    static void braceConstruct(RelaxedPtr<Tp> pos, Args&& ...args)
     noexcept(noexcept(Tp{std::forward<Args>(args)...}))
     {
         new(pos) Tp{std::forward<Args>(args)...};
@@ -579,30 +592,30 @@ struct constructor<Tp, false>
         p.last = p.first;
     }
     template<typename ...Args>
-    static void brace_construct(std::size_t num, RelaxedPtr<Tp> pos, const Args& ...args)
+    static void braceConstruct(size_t num, RelaxedPtr<Tp> pos, const Args& ...args)
     noexcept(noexcept(Tp{args...}))
     {
         exception_safety p{pos, pos};
-        for(std::size_t i = 0; i < num; ++i)
+        for(size_t i = 0; i < num; ++i)
           new(p.last++) Tp{args...};
         p.last = p.first;
     }
 
-    static void copy_construct(std::size_t num, RelaxedPtr<Tp> pos, RelaxedPtr<const Tp> source)
+    static void copyConstruct(size_t num, RelaxedPtr<Tp> pos, RelaxedPtr<const Tp> source)
     noexcept(std::is_nothrow_copy_constructible<Tp>::value)
     {
         exception_safety p{pos, pos};
-        for(std::size_t i = 0; i < num; ++i){
+        for(size_t i = 0; i < num; ++i){
           new(p.last++) Tp(*source);
           ++source;
         }
         p.last = p.first;
     }
-    static void move_construct(std::size_t num, RelaxedPtr<Tp> pos, RelaxedPtr<Tp> source)
+    static void moveConstruct(size_t num, RelaxedPtr<Tp> pos, RelaxedPtr<Tp> source)
     noexcept(std::is_nothrow_move_constructible<Tp>::value)
     {
         exception_safety p{pos, pos};
-        for(std::size_t i = 0; i < num; ++i){
+        for(size_t i = 0; i < num; ++i){
           new(p.last++) Tp(static_cast<Tp&&>(*source));
           ++source;
         }
@@ -610,15 +623,53 @@ struct constructor<Tp, false>
     }
 };
 
+template<typename Tp, typename ...Args>
+void construct(RelaxedPtr<Tp> pos, Args&& ...args)
+noexcept(noexcept(Constructor<Tp>::construct(pos, std::forward<Args>(args)...)))
+{
+    Constructor<Tp>::construct(pos, std::forward<Args>(args)...);
+}
+template<typename Tp, typename ...Args>
+void braceConstruct(RelaxedPtr<Tp> pos, Args&& ...args)
+noexcept(noexcept(Constructor<Tp>::braceConstruct(pos, std::forward<Args>(args)...)))
+{
+    Constructor<Tp>::braceConstruct(pos, std::forward<Args>(args)...);
+}
+template<typename Tp, typename ...Args>
+void construct(size_t num, RelaxedPtr<Tp> pos, const Args& ...args)
+noexcept(noexcept(Constructor<Tp>::construct(num, pos, args...)))
+{
+    Constructor<Tp>::construct(num, pos, args...);
+}
+template<typename Tp, typename ...Args>
+void braceConstruct(size_t num, RelaxedPtr<Tp> pos, const Args& ...args)
+noexcept(noexcept(Constructor<Tp>::braceConstruct(num, pos, args...)))
+{
+    Constructor<Tp>::braceConstruct(num, pos, args...);
+}
+template<typename Tp, typename ...Args>
+void copyConstruct(size_t num, RelaxedPtr<Tp> pos, RelaxedPtr<const Tp> source)
+noexcept(noexcept(Constructor<Tp>::copyConstruct(num, pos, source)))
+{
+    Constructor<Tp>::copyConstruct(num, pos, source);
+}
+template<typename Tp, typename ...Args>
+void moveConstruct(size_t num, RelaxedPtr<Tp> pos, RelaxedPtr<Tp> source)
+noexcept(noexcept(Constructor<Tp>::moveConstruct(num, pos, source)))
+{
+    Constructor<Tp>::moveConstruct(num, pos, source);
+}
+
+
 
 class Buffer
 {
   public:
-    using pointer = RelaxedPtr<void>;
+    using pointer = RelaxedPtr<Byte>;
 
-    Buffer() noexcept : size(0), m_buffer(){}
+    Buffer() noexcept : size(0), m_buffer() {}
 
-    Buffer(size_t len) : size(len), m_buffer(newBuffer(len)) {}
+    Buffer(size_t len) : size(len), m_buffer(pointer(newBuffer(len))) {}
 
     Buffer(Buffer &&mov) noexcept 
     : size(Move(mov.size)), m_buffer(Move(mov.m_buffer)) {}
@@ -630,18 +681,23 @@ class Buffer
         this->reset();
     }
 
-    friend void swap(Buffer &a, Buffer &b) noexcept
+    void swap(Buffer &b) noexcept
     {
-        a.doSwap(b);
+        using std::swap;
+        swap(this->m_buffer, b.m_buffer);
+        this->size.swap(b.size);
     }
 
-    ReadOnlyProperty<size_t, Buffer> size;
+    friend void swap(Buffer &a, Buffer &b) noexcept
+    {
+        a.swap(b);
+    }
 
     void reset(size_t new_cap)
     {
-        if (new_cap > this->size){
-            Buffer tmp(new_cap);
-            swap(*this, tmp);
+        if (new_cap > this->size()){
+          Buffer tmp(new_cap);
+          this->swap(tmp);
         }
     }
     void reset()
@@ -650,25 +706,24 @@ class Buffer
         this->size = 0;
     }
 
+    ByteSpan get() const noexcept
+    {
+        return ByteSpan{this->buffer(), this->size()};
+    }
 
-    void* buffer() const noexcept
+    pointer buffer() const noexcept
     {
         return this->m_buffer;
     }
-    pointer data() const noexcept
+    void* data() const noexcept
     {
         return this->m_buffer;
     }
+
+
+    ReadOnlyProperty<size_t, Buffer> size;
 
   private:
-    void doSwap(Buffer &b) noexcept
-    {
-        using std::swap;
-        swap(this->m_buffer, b.m_buffer);
-        this->size.swap(b.size);
-    }
-
-
     pointer m_buffer;
 };
 
