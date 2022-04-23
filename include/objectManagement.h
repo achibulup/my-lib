@@ -443,12 +443,12 @@ class RelaxedPtr<const void>
     alias_pointer i_ptr;
 };
 
-#else //ACHIBULUP_Cpp17_prior
+#else //ACHIBULUP_Cpp17
 
 template<typename Tp>
 using RelaxedPtr = Tp*;
 
-#endif //ACHIBULUP_Cpp17_prior
+#endif //ACHIBULUP_Cpp17
 
 template<typename Tp>
 RelaxedPtr<Tp> newBuffer(size_t s)
@@ -491,6 +491,7 @@ struct Destructor<Tp, false>
     }
 };
 
+#if ACHIBULUP_Cpp17
 template<typename Tp>
 void destroy(RelaxedPtr<Tp> pos) noexcept
 {
@@ -498,6 +499,18 @@ void destroy(RelaxedPtr<Tp> pos) noexcept
 }
 template<typename Tp>
 void destroy(RelaxedPtr<Tp> pos, size_t num) noexcept
+{
+    Destructor<Tp>::destroy(pos, num);
+}
+#endif //ACHIBULUP_Cpp17
+
+template<typename Tp>
+void destroy(Tp *pos) noexcept
+{
+    Destructor<Tp>::destroy(pos);
+}
+template<typename Tp>
+void destroy(Tp *pos, size_t num) noexcept
 {
     Destructor<Tp>::destroy(pos, num);
 }
@@ -623,6 +636,7 @@ struct Constructor<Tp, false>
     }
 };
 
+#if ACHIBULUP_Cpp17
 template<typename Tp, typename ...Args>
 void construct(RelaxedPtr<Tp> pos, Args&& ...args)
 noexcept(noexcept(Constructor<Tp>::construct(pos, std::forward<Args>(args)...)))
@@ -655,6 +669,45 @@ noexcept(noexcept(Constructor<Tp>::copyConstruct(num, pos, source)))
 }
 template<typename Tp, typename ...Args>
 void moveConstruct(size_t num, RelaxedPtr<Tp> pos, RelaxedPtr<Tp> source)
+noexcept(noexcept(Constructor<Tp>::moveConstruct(num, pos, source)))
+{
+    Constructor<Tp>::moveConstruct(num, pos, source);
+}
+#endif // ACHIBULUP_Cpp17
+
+
+template<typename Tp, typename ...Args>
+void construct(Tp *pos, Args&& ...args)
+noexcept(noexcept(Constructor<Tp>::construct(pos, std::forward<Args>(args)...)))
+{
+    Constructor<Tp>::construct(pos, std::forward<Args>(args)...);
+}
+template<typename Tp, typename ...Args>
+void braceConstruct(Tp *pos, Args&& ...args)
+noexcept(noexcept(Constructor<Tp>::braceConstruct(pos, std::forward<Args>(args)...)))
+{
+    Constructor<Tp>::braceConstruct(pos, std::forward<Args>(args)...);
+}
+template<typename Tp, typename ...Args>
+void construct(size_t num, Tp *pos, const Args& ...args)
+noexcept(noexcept(Constructor<Tp>::construct(num, pos, args...)))
+{
+    Constructor<Tp>::construct(num, pos, args...);
+}
+template<typename Tp, typename ...Args>
+void braceConstruct(size_t num, Tp *pos, const Args& ...args)
+noexcept(noexcept(Constructor<Tp>::braceConstruct(num, pos, args...)))
+{
+    Constructor<Tp>::braceConstruct(num, pos, args...);
+}
+template<typename Tp, typename ...Args>
+void copyConstruct(size_t num, Tp *pos, const Tp *source)
+noexcept(noexcept(Constructor<Tp>::copyConstruct(num, pos, source)))
+{
+    Constructor<Tp>::copyConstruct(num, pos, source);
+}
+template<typename Tp, typename ...Args>
+void moveConstruct(size_t num, Tp *pos, Tp *source)
 noexcept(noexcept(Constructor<Tp>::moveConstruct(num, pos, source)))
 {
     Constructor<Tp>::moveConstruct(num, pos, source);

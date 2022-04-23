@@ -281,97 +281,105 @@ std::string stringFormat(const Args& ...args)
 
 template<typename Tp>
 Tp convert(string_view);
-// #if ACHIBULUP__Cpp17_later
-// template<> int convert<int>(string_view str)
-// {
-//     int res = 0;
-//     std::from_chars(str.data(), str.data() + str.size(), res);
-//     return res;
-// }
-// template<> unsigned int convert<unsigned int>(string_view str)
-// {
-//     unsigned int res = 0;
-//     std::from_chars(str.data(), str.data() + str.size(), res);
-//     return res;
-// }
-// template<> short convert<short>(string_view str)
-// {
-//     short res = 0;
-//     std::from_chars(str.data(), str.data() + str.size(), res);
-//     return res;
-// }
-// template<> unsigned short convert<unsigned short>(string_view str)
-// {
-//     unsigned short res = 0;
-//     std::from_chars(str.data(), str.data() + str.size(), res);
-//     return res;
-// }
-// template<> long convert<long>(string_view str)
-// {
-//     long res = 0;
-//     std::from_chars(str.data(), str.data() + str.size(), res);
-//     return res;
-// }
-// template<> unsigned long convert<unsigned long>(string_view str)
-// {
-//     unsigned long res = 0;
-//     std::from_chars(str.data(), str.data() + str.size(), res);
-//     return res;
-// }
-// template<> long long convert<long long>(string_view str)
-// {
-//     long long res = 0;
-//     std::from_chars(str.data(), str.data() + str.size(), res);
-//     return res;
-// }
-// template<> unsigned long long convert<unsigned long long>(string_view str)
-// {
-//     unsigned long long res = 0;
-//     std::from_chars(str.data(), str.data() + str.size(), res);
-//     return res;
-// }
-// #else
-// template<> int 
-// convert<int>(string_view str)
-// {
-//     return std::stoll(str);
-// }
-// template<> unsigned int 
-// convert<unsigned int>(string_view str)
-// {
-//     return std::stoull(str);
-// }
-// template<> short 
-// convert<short>(string_view str)
-// {
-//     return std::stoll(str);
-// }
-// template<> unsigned short 
-// convert<unsigned short>(string_view str)
-// {
-//     return std::stoull(str);
-// }
-// template<> long 
-// convert<long>(string_view str)
-// {
-//     return std::stoll(str);
-// }
-// template<> unsigned long 
-// convert<unsigned long>(string_view str)
-// {
-//     return std::stoull(str);
-// }
-// template<> long long 
-// convert<long long>(string_view str)
-// {
-//     return std::stoll(str);
-// }
-// template<> unsigned long long 
-// convert<unsigned long long>(string_view str)
-// {
-//     return std::stoull(str);
-// }
-// #endif
+#if ACHIBULUP__Cpp17_later && __has_include(<charconv>)
+template<> inline int 
+convert<int>(string_view str)
+{
+    int res = 0;
+    std::from_chars(str.data(), str.data() + str.size(), res);
+    return res;
+}
+template<> inline unsigned int 
+convert<unsigned int>(string_view str)
+{
+    unsigned int res = 0;
+    std::from_chars(str.data(), str.data() + str.size(), res);
+    return res;
+}
+template<> inline short 
+convert<short>(string_view str)
+{
+    short res = 0;
+    std::from_chars(str.data(), str.data() + str.size(), res);
+    return res;
+}
+template<> inline unsigned short 
+convert<unsigned short>(string_view str)
+{
+    unsigned short res = 0;
+    std::from_chars(str.data(), str.data() + str.size(), res);
+    return res;
+}
+template<> inline long 
+convert<long>(string_view str)
+{
+    long res = 0;
+    std::from_chars(str.data(), str.data() + str.size(), res);
+    return res;
+}
+template<> inline unsigned long 
+convert<unsigned long>(string_view str)
+{
+    unsigned long res = 0;
+    std::from_chars(str.data(), str.data() + str.size(), res);
+    return res;
+}
+template<> inline long long 
+convert<long long>(string_view str)
+{
+    long long res = 0;
+    std::from_chars(str.data(), str.data() + str.size(), res);
+    return res;
+}
+template<> inline unsigned long long 
+convert<unsigned long long>(string_view str)
+{
+    unsigned long long res = 0;
+    std::from_chars(str.data(), str.data() + str.size(), res);
+    return res;
+}
+#else
+template<> inline int 
+convert<int>(string_view str)
+{
+    return std::stoll(std::string(str));
+}
+template<> inline unsigned int 
+convert<unsigned int>(string_view str)
+{
+    return std::stoull(std::string(str));
+}
+template<> inline short 
+convert<short>(string_view str)
+{
+    return std::stoll(std::string(str));
+}
+template<> inline unsigned short 
+convert<unsigned short>(string_view str)
+{
+    return std::stoull(std::string(str));
+}
+template<> inline long 
+convert<long>(string_view str)
+{
+    return std::stoll(std::string(str));
+}
+template<> inline unsigned long 
+convert<unsigned long>(string_view str)
+{
+    return std::stoull(std::string(str));
+}
+template<> inline long long 
+convert<long long>(string_view str)
+{
+    return std::stoll(std::string(str));
+}
+template<> inline unsigned long long 
+convert<unsigned long long>(string_view str)
+{
+    return std::stoull(std::string(str));
+}
+#endif
 
 
 namespace n_Utils
