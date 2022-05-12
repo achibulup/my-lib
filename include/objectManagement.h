@@ -35,7 +35,7 @@ inline constexpr Tp* Launder(Tp *ptr) noexcept
 #endif //ACHIBULUP__Cpp17_later
 }
 
-#if ACHIBULUP__Cpp17
+#if ACHIBULUP__Cpp17_prior
 template<typename Tp>
 class RelaxedPtr
 {
@@ -443,12 +443,12 @@ class RelaxedPtr<const void>
     alias_pointer i_ptr;
 };
 
-#else //ACHIBULUP_Cpp17
+#else //ACHIBULUP_Cpp17_prior
 
 template<typename Tp>
 using RelaxedPtr = Tp*;
 
-#endif //ACHIBULUP_Cpp17
+#endif //ACHIBULUP_Cpp17_prior
 
 template<typename Tp>
 RelaxedPtr<Tp> newBuffer(size_t s)
@@ -491,7 +491,7 @@ struct Destructor<Tp, false>
     }
 };
 
-#if ACHIBULUP_Cpp17
+#if ACHIBULUP_Cpp17_prior
 template<typename Tp>
 void destroy(RelaxedPtr<Tp> pos) noexcept
 {
@@ -502,7 +502,7 @@ void destroy(RelaxedPtr<Tp> pos, size_t num) noexcept
 {
     Destructor<Tp>::destroy(pos, num);
 }
-#endif //ACHIBULUP_Cpp17
+#endif //ACHIBULUP_Cpp17_prior
 
 template<typename Tp>
 void destroy(Tp *pos) noexcept
@@ -636,7 +636,7 @@ struct Constructor<Tp, false>
     }
 };
 
-#if ACHIBULUP_Cpp17
+#if ACHIBULUP_Cpp17_prior
 template<typename Tp, typename ...Args>
 void construct(RelaxedPtr<Tp> pos, Args&& ...args)
 noexcept(noexcept(Constructor<Tp>::construct(pos, std::forward<Args>(args)...)))
@@ -673,7 +673,7 @@ noexcept(noexcept(Constructor<Tp>::moveConstruct(num, pos, source)))
 {
     Constructor<Tp>::moveConstruct(num, pos, source);
 }
-#endif // ACHIBULUP_Cpp17
+#endif // ACHIBULUP_Cpp17_prior
 
 
 template<typename Tp, typename ...Args>
