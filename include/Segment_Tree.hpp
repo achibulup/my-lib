@@ -1,5 +1,5 @@
-#ifndef SEGMENT_TREE_H_INCLUDED
-#define SEGMENT_TREE_H_INCLUDED
+#ifndef SEGMENT_TREE_HPP_INCLUDED
+#define SEGMENT_TREE_HPP_INCLUDED
 
 #include <stdexcept>
 #include <vector>
@@ -1292,4 +1292,4 @@ namespace Achibulup
 
 }
 
-#endif // SEGMENT_TREE_H_INCLUDED
+#endif // SEGMENT_TREE_HPP_INCLUDED

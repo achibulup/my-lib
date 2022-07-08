@@ -1,8 +1,8 @@
-#ifndef VLA_H_INCLUDED
-#define VLA_H_INCLUDED
+#ifndef VLA_HPP_INCLUDED
+#define VLA_HPP_INCLUDED
 #include "Iterator_wrapper.h"
-#include "common_utils.h"
-#include "objectManagement.h"
+#include "common_utils.hpp"
+#include "objectManagement.hpp"
 #include <new>
 #include <array>
 #include <iterator>
@@ -1815,4 +1815,4 @@ inline bool empty(const Tp &V)
 }
 
 }
-#endif // VLA_H_INCLUDED
+#endif // VLA_HPP_INCLUDED

@@ -1,11 +1,11 @@
-#ifndef TRIE_H_INCLUDED
-#define TRIE_H_INCLUDED
+#ifndef TRIE_HPP_INCLUDED
+#define TRIE_HPP_INCLUDED
 #include <climits>
 #include <vector>
 #include <string>
 #include <cstring>
 #include <initializer_list>
-#include "common_utils.h"
+#include "common_utils.hpp"
 
 namespace Achibulup
 {
@@ -586,9 +586,9 @@ namespace Achibulup
         size_type i_wcnt;
     };
     template<char l, char u>
-    const size_t Trie<l, u>::rootid;
+    const Trie<l, u>::id_type Trie<l, u>::rootid;
     template<char l, char u>
-    const size_t Trie<l, u>::nposid;
+    const Trie<l, u>::id_type Trie<l, u>::nposid;
 
 
 
@@ -1161,4 +1161,4 @@ namespace Achibulup
 }
 
 
-#endif // TRIE_H_INCLUDED
+#endif // TRIE_HPP_INCLUDED

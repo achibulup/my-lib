@@ -1,7 +1,7 @@
-#ifndef ITERATOR_WRAPPER_H_INCLUDED
-#define ITERATOR_WRAPPER_H_INCLUDED
+#ifndef ITERATOR_WRAPPER_HPP_INCLUDED
+#define ITERATOR_WRAPPER_HPP_INCLUDED
 #include <iterator>
-#include "common_utils.h"
+#include "common_utils.hpp"
 namespace Achibulup
 {
 namespace n_Iterator
@@ -87,9 +87,13 @@ class IteratorWrapper
 
 
   public:
-    constexpr const base_type& base() const noexcept
+    constexpr const base_type& base() const & noexcept
     {
         return this->m_base;
+    }
+    ACHIBULUP__constexpr_fun14 base_type&& base() && noexcept
+    {
+        return std::move(this->m_base);
     }
 
     ///input iter & forward iter requirements
@@ -114,14 +118,14 @@ class IteratorWrapper
         return lhs.base() != rhs.base(); 
     }
 
-    
-    ///bidirectional iter requirements  
-
     ACHIBULUP__constexpr_fun14 void advance() &
     noexcept(noexcept(++(this->m_base)))
     {
         ++(this->m_base);
     }
+    
+    ///bidirectional iter requirements  
+
     ACHIBULUP__constexpr_fun14 void recede() &
     noexcept(noexcept(--(this->m_base)))
     {
@@ -188,7 +192,7 @@ struct Fallback
     template<typename Tp>
     constexpr Fallback(const Tp*) noexcept {}
 };
-constexpr bool isIterHelper(Fallback) noexcept
+inline constexpr bool isIterHelper(Fallback) noexcept
 {
     return false;
 }
@@ -375,4 +379,4 @@ noexcept(noexcept(Diff{lhs.base() - rhs.base()}))
 }
 
 
-#endif // ITERATOR_WRAPPER_H_INCLUDED
+#endif // ITERATOR_WRAPPER_HPP_INCLUDED

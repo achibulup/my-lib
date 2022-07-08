@@ -6,7 +6,7 @@
 //Int can handle signed integer while uInt also supports bitwise operations for unsigned integer
 
 
-#include "common_utils.h"
+#include "common_utils.hpp"
 #include <cmath> //log2
 #include <string> //input
 #include <limits> //unsigned long long max

@@ -1,8 +1,8 @@
 #ifndef LIFOMemoryResource_HPP_INCLUDED
 #define LIFOMemoryResource_HPP_INCLUDED
 
-#include "common_utils.h"
-#include "objectManagement.h"
+#include "common_utils.hpp"
+#include "objectManagement.hpp"
 #include <vector>
 #include <cstddef>
 
@@ -72,7 +72,7 @@ class GrowingBufferListStrategy
         return this->m_buffers;
     }
 
-    void setGrowthFactor(float growth_factor) noexcept
+    void setGrowthFactor(float growth_factor)
     {
         if (growth_factor < 1.f) 
           throw std::invalid_argument("growth_factor must be >= 1.f");
@@ -229,8 +229,6 @@ class BufferedLIFOMemResource : public LIFOMemoryResource
     BufferedLIFOMemResource(const BufferedLIFOMemResource&) = delete;
     void operator=(const BufferedLIFOMemResource&) = delete;
     void swap(BufferedLIFOMemResource&) noexcept = delete;
-    friend void swap(BufferedLIFOMemResource&, 
-                     BufferedLIFOMemResource&) = delete;
 
     BufferedLIFOMemResource(float growth_factor) noexcept
     : BufferedLIFOMemResource()
@@ -239,8 +237,12 @@ class BufferedLIFOMemResource : public LIFOMemoryResource
     }
 
   protected:
-    Byte m_buffer[BUFFERSIZE];
+    Byte m_buffer[BUFFERSIZE] alignas(alignof(std::max_align_t));
 };
+
+template<std::size_t BUFFERSIZE1, std::size_t BUFFERSIZE2>
+void swap(BufferedLIFOMemResource<BUFFERSIZE1>&,
+          BufferedLIFOMemResource<BUFFERSIZE2>&) = delete;
 
 }
 

@@ -1,5 +1,5 @@
-#ifndef SAFEUNION_H_INCLUDED
-#define SAFEUNION_H_INCLUDED
+#ifndef SAFEUNION_HPP_INCLUDED
+#define SAFEUNION_HPP_INCLUDED
 
 // featuring type-safe union with named members
 
@@ -31,9 +31,9 @@
 
 #include <utility>
 #include <type_traits>
-#include "common_utils.h"
-#include "string_literal.h"
-#include "objectManagement.h"
+#include "common_utils.hpp"
+#include "StringConstant.hpp"
+#include "objectManagement.hpp"
 
 namespace Achibulup
 {
@@ -631,4 +631,4 @@ class SafeUnion<std::pair<Types, Names>...>
 };
 
 }
-#endif // SAFEUNION_H_INCLUDED
+#endif // SAFEUNION_HPP_INCLUDED

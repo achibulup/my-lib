@@ -65,12 +65,12 @@ class PolymorphicStack
     template<typename Tp, typename Elem = std::decay_t<Tp>>
     Elem* push(Tp &&element)
     {
-        return this->pushBack(std::forward<Tp>(element));
+        return this->pushBack(static_cast<Tp&&>(element));
     }
     template<typename Elem = Base, typename ...Args>
     Elem* emplace(Args&& ...args)
     {
-        return this->emplaceBack<Elem>(std::forward<Args>(args)...);
+        return this->emplaceBack<Elem>(static_cast<Args&&>(args)...);
     }
 
     void pop()
@@ -99,7 +99,7 @@ class PolymorphicStack
     template<typename Tp, typename Elem = std::decay_t<Tp>>
     Elem* pushBack(Tp &&element)
     {
-        return this->emplaceBack<Elem>(std::move(element));
+        return this->emplaceBack<Elem>(std::forward<Tp>(element));
     }
     template<typename Elem = Base, typename ...Args>
     Elem* emplaceBack(Args&& ...args)
@@ -110,14 +110,14 @@ class PolymorphicStack
                    || std::has_virtual_destructor<Base>(),
                       "Base must have virtual destructor to have polymorphic elements");
         void *mem = this->m_host.allocate(sizeof(Elem), alignof(Elem));
-        Elem *ptr = new (mem) Elem(std::forward<Args>(args)...);
+        Elem *ptr = new (mem) Elem(static_cast<Args&&>(args)...);
         this->m_stack.push_back(ptr);
         return ptr;
     }
     
     void popBack()
     {
-        destroy(this->m_stack.back());
+        Achibulup::destroy(this->m_stack.back());
         this->m_host.deallocateLast();
         this->m_stack.pop_back();
     }

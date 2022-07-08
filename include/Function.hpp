@@ -1,6 +1,6 @@
-#ifndef ACHIBULUP__FUNCTION_H_INCLUDED
-#define ACHIBULUP__FUNCTION_H_INCLUDED
-#include "common_utils.h"
+#ifndef ACHIBULUP__FUNCTION_HPP_INCLUDED
+#define ACHIBULUP__FUNCTION_HPP_INCLUDED
+#include "common_utils.hpp"
 #include <utility>
 #include <memory>
 namespace Achibulup
@@ -124,5 +124,5 @@ namespace Achibulup
     
 }
 
-#endif // ACHIBULUP__FUNCTION_H_INCLUDED
+#endif // ACHIBULUP__FUNCTION_HPP_INCLUDED
 

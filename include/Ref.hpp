@@ -1,6 +1,6 @@
-#ifndef REF_H_INCLUDED
-#define REF_H_INCLUDED
-#include "common_utils.h"
+#ifndef REF_HPP_INCLUDED
+#define REF_HPP_INCLUDED
+#include "common_utils.hpp"
 #include <type_traits>
 #include <memory>
 
@@ -302,4 +302,4 @@ class Ref
 };
 }
 
-#endif // REF_H_INCLUDED
+#endif // REF_HPP_INCLUDED
