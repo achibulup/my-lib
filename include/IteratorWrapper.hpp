@@ -40,10 +40,8 @@ struct IterTraits
 } // namespace n_Iterator
 
 
-///a template for writing iterator wrappers
+///a template for writing iterator wrappers, using CRTP
 ///used for writing an iterator wrapper class that behave like the underlying iterator
-///you can inherit from this template, using the curiously recurring template pattern
-///then this class will behave like the underlying iterator
 ///and you can override any behavior you want, creating iterator adapters
 
 ///usage example: assume you want to write a move iterator adapter for std::vector<int>::iterator
@@ -185,32 +183,10 @@ class IteratorWrapper
     Base m_base;
 };
 
-namespace n_Iterator
-{
-struct Fallback
-{
-    template<typename Tp>
-    constexpr Fallback(const Tp*) noexcept {}
-};
-inline constexpr bool isIterHelper(Fallback) noexcept
-{
-    return false;
-}
-template<typename Iter, typename Base>
-constexpr bool isIterHelper(IteratorWrapper<Iter, Base>*) noexcept
-{
-    return true;
-}
-template<typename Tp>
-constexpr bool isIteratorWrapper() noexcept
-{
-    return isIterHelper(static_cast<Tp*>(nullptr));
-}
-} // namespace n_Iterator
 
 
 template<typename Iter, 
-         EnableIf_t<n_Iterator::isIteratorWrapper<Iter>()> = 0>
+         EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
 ACHIBULUP__constexpr_fun14 Iter& operator ++ (Iter &iter)
 noexcept(noexcept(iter.advance()))
 {
@@ -218,7 +194,7 @@ noexcept(noexcept(iter.advance()))
     return iter;
 }
 template<typename Iter, 
-        EnableIf_t<n_Iterator::isIteratorWrapper<Iter>()> = 0>
+        EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
 ACHIBULUP__constexpr_fun14 Iter& operator ++ (Iter &iter, int)
 noexcept(noexcept(Iter{++iter}))
 {
@@ -228,7 +204,7 @@ noexcept(noexcept(Iter{++iter}))
 }
 
 template<typename Iter, 
-        EnableIf_t<n_Iterator::isIteratorWrapper<Iter>()> = 0>
+        EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
 ACHIBULUP__constexpr_fun14 Iter& operator -- (Iter &iter)
 noexcept(noexcept(iter.recede()))
 {
@@ -236,7 +212,7 @@ noexcept(noexcept(iter.recede()))
     return iter;
 }
 template<typename Iter, 
-        EnableIf_t<n_Iterator::isIteratorWrapper<Iter>()> = 0>
+        EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
 ACHIBULUP__constexpr_fun14 Iter& operator -- (Iter &iter, int)
 noexcept(noexcept(Iter{--iter}))
 {
@@ -246,7 +222,7 @@ noexcept(noexcept(Iter{--iter}))
 }
 
 template<typename Iter, 
-        EnableIf_t<n_Iterator::isIteratorWrapper<Iter>()> = 0>
+        EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
 ACHIBULUP__constexpr_fun14 Iter& 
 operator += (Iter &iter, typename Iter::difference_type dist) 
 noexcept(noexcept(iter.advance(dist)))
@@ -255,7 +231,7 @@ noexcept(noexcept(iter.advance(dist)))
     return iter;
 }
 template<typename Iter, 
-        EnableIf_t<n_Iterator::isIteratorWrapper<Iter>()> = 0>
+        EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
 ACHIBULUP__constexpr_fun14 Iter& 
 operator -= (Iter &iter, typename Iter::difference_type dist) 
 noexcept(noexcept(iter.recede(dist)))
@@ -266,7 +242,7 @@ noexcept(noexcept(iter.recede(dist)))
 
 
 template<typename Iter, 
-        EnableIf_t<n_Iterator::isIteratorWrapper<Iter>()> = 0>
+        EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
 constexpr Iter
 operator + (Iter iter, typename Iter::difference_type dist)
 noexcept(noexcept(Iter{std::move(iter += dist)}))
@@ -283,7 +259,7 @@ noexcept(noexcept(Iter{std::move(iter += dist)}))
 //     return iter + dist;
 // }
 template<typename Iter, 
-        EnableIf_t<n_Iterator::isIteratorWrapper<Iter>()> = 0>
+        EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
 constexpr Iter
 operator - (Iter iter, typename Iter::difference_type dist)
 noexcept(noexcept(Iter{std::move(iter -= dist)}))

@@ -1,6 +1,6 @@
 #ifndef VLA_HPP_INCLUDED
 #define VLA_HPP_INCLUDED
-#include "Iterator_wrapper.h"
+#include "IteratorWrapper.hpp"
 #include "common_utils.hpp"
 #include "objectManagement.hpp"
 #include <new>
