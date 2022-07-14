@@ -1,7 +1,12 @@
 #ifndef ITERATOR_WRAPPER_HPP_INCLUDED
 #define ITERATOR_WRAPPER_HPP_INCLUDED
-#include <iterator>
+
+
 #include "common_utils.hpp"
+#include <iterator>
+
+
+
 namespace Achibulup
 {
 namespace n_Iterator
@@ -40,14 +45,14 @@ struct IterTraits
 } // namespace n_Iterator
 
 
-///a template for writing iterator wrappers, using CRTP
+///a template for writing iterator wrappers
 ///used for writing an iterator wrapper class that behave like the underlying iterator
 ///and you can override any behavior you want, creating iterator adapters
 
 ///usage example: assume you want to write a move iterator adapter for std::vector<int>::iterator
-///class MoveIterator : public IteratorWrapper<MoveIterator, std::vector<int>::iterator>
+///class MoveIterator : public IteratorWrapper<std::vector<int>::iterator>
 ///{
-///    using Base = IteratorWrapper<MoveIterator, std::vector<int>::iterator>;
+///    using Base = IteratorWrapper<std::vector<int>::iterator>;
 ///    make your own constructor
 ///    MoveIterator(std::vector<int>::iterator iter) : Base(iter) {}
 ///    override the dereference operator
@@ -60,7 +65,7 @@ struct IterTraits
 ///};
 
 
-template<typename Iter, typename Base>
+template<typename Base>
 class IteratorWrapper
 {
   public:
@@ -74,17 +79,28 @@ class IteratorWrapper
   protected:
     constexpr IteratorWrapper() noexcept(noexcept(Base())) = default;
 
-    explicit constexpr IteratorWrapper(Base it) 
-    noexcept(noexcept(Base{std::move(it)})) : m_base(std::move(it)) {}
+    explicit constexpr IteratorWrapper(Argument<Base> it) 
+    noexcept(noexcept(Base(std::move(it)))) : m_base(std::move(it)) {}
 
-    template<typename OtherIter, typename OtherBase, 
-                EnableIf_t<std::is_convertible<OtherBase, Base>::value> = 0>
+    template<typename OtherBase, 
+             EnableIf_t<std::is_convertible<OtherBase, Base>::value> = 0>
     explicit constexpr 
-    IteratorWrapper(const IteratorWrapper<OtherIter, OtherBase> &cast) 
-    noexcept(noexcept(Base{cast.base()})) : m_base(cast.base()) {}
+    IteratorWrapper(const IteratorWrapper<OtherBase> &cast) 
+    noexcept(noexcept(Base(cast.base()))) : m_base(cast.base()) {}
+
+    template<typename OtherBase, 
+             EnableIf_t<std::is_convertible<OtherBase, Base>::value> = 0>
+    explicit constexpr 
+    IteratorWrapper(const IteratorWrapper<OtherBase> &&cast) 
+    noexcept(noexcept(Base(std::move(cast).base()))) 
+    : m_base(std::move(cast).base()) {}
 
 
   public:
+    ACHIBULUP__constexpr_fun14 base_type& base() & noexcept
+    {
+        return this->m_base;
+    }
     constexpr const base_type& base() const & noexcept
     {
         return this->m_base;
@@ -105,17 +121,6 @@ class IteratorWrapper
         return this->m_base;
     }
 
-    friend constexpr bool operator == (const IteratorWrapper &lhs, 
-                                       const IteratorWrapper &rhs) noexcept
-    { 
-        return lhs.base() == rhs.base(); 
-    }
-    friend constexpr bool operator != (const IteratorWrapper &lhs, 
-                                       const IteratorWrapper &rhs) noexcept
-    { 
-        return lhs.base() != rhs.base(); 
-    }
-
     ACHIBULUP__constexpr_fun14 void advance() &
     noexcept(noexcept(++(this->m_base)))
     {
@@ -134,30 +139,9 @@ class IteratorWrapper
 
     ///random access iter requirements
     constexpr reference operator [] (difference_type i) const
-    noexcept(noexcept(this->m_base + i))
+    noexcept(noexcept(*(this->m_base + i)))
     {
-        return *(*this + i);
-    }
-
-    friend bool constexpr operator > (const IteratorWrapper &lhs, 
-                                      const IteratorWrapper &rhs) noexcept
-    { 
-        return lhs.base() > rhs.base(); 
-    }
-    friend constexpr bool operator >= (const IteratorWrapper &lhs, 
-                                       const IteratorWrapper &rhs) noexcept
-    { 
-        return lhs.base() >= rhs.base();
-    }
-    friend constexpr bool operator < (const IteratorWrapper &lhs, 
-                                      const IteratorWrapper &rhs) noexcept
-    { 
-        return lhs.base() < rhs.base(); 
-    }
-    friend constexpr bool operator <= (const IteratorWrapper &lhs, 
-                                       const IteratorWrapper &rhs) noexcept
-    { 
-        return lhs.base() <= rhs.base();
+        return *(this->m_base + i);
     }
 
     ACHIBULUP__constexpr_fun14 void advance(difference_type dist) &
@@ -171,18 +155,24 @@ class IteratorWrapper
         this->m_base -= dist;
     }
 
-    friend constexpr difference_type 
-    operator - (const IteratorWrapper &lhs, const IteratorWrapper &rhs)
-    noexcept(noexcept(lhs.base() - rhs.base()))
-    {
-        return lhs.base() - rhs.base();
-    }
-
   protected:
 
     Base m_base;
 };
 
+
+template<typename Iter,
+         EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
+constexpr bool operator == (const Iter &lhs, const Iter &rhs) noexcept
+{ 
+    return lhs.base() == rhs.base(); 
+}
+template<typename Iter,
+         EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
+constexpr bool operator != (const Iter &lhs, const Iter &rhs) noexcept
+{ 
+    return lhs.base() != rhs.base(); 
+}
 
 
 template<typename Iter, 
@@ -221,6 +211,35 @@ noexcept(noexcept(Iter{--iter}))
     return store;
 }
 
+
+
+
+template<typename Iter,
+         EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
+constexpr bool operator < (const Iter &lhs, const Iter &rhs) noexcept
+{ 
+    return lhs.base() < rhs.base(); 
+}
+template<typename Iter,
+         EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
+constexpr bool operator > (const Iter &lhs, const Iter &rhs) noexcept
+{ 
+    return rhs < lhs; 
+}
+template<typename Iter,
+         EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
+constexpr bool operator <= (const Iter &lhs, const Iter &rhs) noexcept
+{ 
+    return !(rhs < lhs); 
+}
+template<typename Iter,
+         EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
+constexpr bool operator >= (const Iter &lhs, const Iter &rhs) noexcept
+{ 
+    return !(lhs < rhs); 
+}
+
+
 template<typename Iter, 
         EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
 ACHIBULUP__constexpr_fun14 Iter& 
@@ -241,32 +260,48 @@ noexcept(noexcept(iter.recede(dist)))
 }
 
 
-template<typename Iter, 
-        EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
+template<typename Iter, typename Type = typename std::decay<Iter>::type,
+        EnableIf_t<IsDerivedFrom<Type, IteratorWrapper>()> = 0>
 constexpr Iter
-operator + (Iter iter, typename Iter::difference_type dist)
-noexcept(noexcept(Iter{std::move(iter += dist)}))
+operator + (Iter &&iter, typename Iter::difference_type dist)
+noexcept(noexcept(Iter{std::forward<Iter>(iter += dist)}))
 {
+    auto ret = std::forward<Iter>(iter);
     iter += dist;
     return iter;
 }
 // template<typename Iter, 
-//         EnableIf_t<n_Iterator::isIteratorWrapper<Iter>()> = 0>
+//         EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
 // constexpr Iter
 // operator + (typename Iter::difference_type dist, Iter iter)
-// noexcept(noexcept(iter))
+// noexcept(noexcept(Iter{std::move(iter += dist)}))
 // {
-//     return iter + dist;
+//     iter += dist;
+//     return iter;
 // }
-template<typename Iter, 
-        EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
+
+template<typename Iter, typename Type = typename std::decay<Iter>::type,
+        EnableIf_t<IsDerivedFrom<Type, IteratorWrapper>()> = 0>
 constexpr Iter
-operator - (Iter iter, typename Iter::difference_type dist)
-noexcept(noexcept(Iter{std::move(iter -= dist)}))
+operator - (Iter &&iter, typename Iter::difference_type dist)
+noexcept(noexcept(Iter{std::forward<Iter>(iter += dist)}))
 {
+    auto ret = std::forward<Iter>(iter);
     iter -= dist;
     return iter;
 }
+
+template<typename Iter, 
+        EnableIf_t<IsDerivedFrom<Iter, IteratorWrapper>()> = 0>
+constexpr typename Iter::difference_type
+operator - (const Iter &lhs, const Iter &rhs)
+noexcept(noexcept(lhs.base() - rhs.base()))
+{
+    return lhs.base() - rhs.base();
+}
+
+
+
 
 
 /// a template for writing iterator wrapper for containers (usually wraps normal pointers)
@@ -283,15 +318,14 @@ noexcept(noexcept(Iter{std::move(iter -= dist)}))
 
 
 template<typename Base, typename Container>
-class BasicIterator : 
-public IteratorWrapper<BasicIterator<Base, Container>, Base>
+class BasicIterator : public IteratorWrapper<Base>
 {
-    using Impl = IteratorWrapper<BasicIterator<Base, Container>, Base>;
+    using Impl = IteratorWrapper<Base>;
 
   public:
     constexpr BasicIterator() = default;
-    constexpr explicit BasicIterator(Base it) 
-    noexcept(noexcept(Base{std::move(it)})) : Impl(std::move(it)) {}
+    constexpr explicit BasicIterator(Argument<Base> it) 
+    noexcept(noexcept(Impl(std::move(it)))) : Impl(std::move(it)) {}
 
 
     template<typename OtherBase,
@@ -299,59 +333,50 @@ public IteratorWrapper<BasicIterator<Base, Container>, Base>
     constexpr BasicIterator(const BasicIterator<OtherBase, Container> &cast)
     noexcept(noexcept(BasicIterator{cast.base()})) 
     : BasicIterator(cast.base()) {}
+
+
+    
+    friend constexpr bool operator == (const BasicIterator &lhs, 
+                                       const BasicIterator &rhs) noexcept
+    { 
+        return lhs.base() == rhs.base(); 
+    }
+    friend constexpr bool operator != (const BasicIterator &lhs, 
+                                const BasicIterator &rhs) noexcept
+    { 
+        return !(lhs == rhs); 
+    }
+    friend constexpr bool operator < (const BasicIterator &lhs, 
+                                      const BasicIterator &rhs) noexcept
+    { 
+        return lhs.base() < rhs.base(); 
+    }
+    friend constexpr bool operator > (const BasicIterator &lhs, 
+                                      const BasicIterator &rhs) noexcept
+    { 
+        return rhs < lhs; 
+    }
+    friend constexpr bool operator <= (const BasicIterator &lhs, 
+                                       const BasicIterator &rhs) noexcept
+    { 
+        return !(rhs < lhs); 
+    }
+    friend constexpr bool operator >= (const BasicIterator &lhs, 
+                                       const BasicIterator &rhs) noexcept
+    { 
+        return !(lhs < rhs); 
+    }
+
+    friend constexpr typename Impl::difference_type
+    operator - (const BasicIterator &lhs, const BasicIterator &rhs)
+    noexcept(noexcept(lhs.base() - rhs.base()))
+    { 
+        return lhs.base() - rhs.base(); 
+    }
 };
 template<typename Tp, typename Container>
 using iterator_wrapper = BasicIterator<Tp, Container>;
 
-template<typename BaseL, typename BaseR, typename Container>
-constexpr bool operator == (const BasicIterator<BaseL, Container> &lhs, 
-                            const BasicIterator<BaseR, Container> &rhs) noexcept
-{ 
-    return lhs.base() == rhs.base(); 
-}
-template<typename BaseL, typename BaseR, typename Container>
-constexpr bool operator != (const BasicIterator<BaseL, Container> &lhs, 
-                            const BasicIterator<BaseR, Container> &rhs) noexcept
-{ 
-    return lhs.base() != rhs.base(); 
-}
-template<typename BaseL, typename BaseR, typename Container>
-constexpr bool operator < (const BasicIterator<BaseL, Container> &lhs, 
-                            const BasicIterator<BaseR, Container> &rhs) noexcept
-{ 
-    return lhs.base() < rhs.base(); 
-}
-template<typename BaseL, typename BaseR, typename Container>
-constexpr bool operator > (const BasicIterator<BaseL, Container> &lhs, 
-                            const BasicIterator<BaseR, Container> &rhs) noexcept
-{ 
-    return lhs.base() > rhs.base(); 
-}
-template<typename BaseL, typename BaseR, typename Container>
-constexpr bool operator <= (const BasicIterator<BaseL, Container> &lhs, 
-                            const BasicIterator<BaseR, Container> &rhs) noexcept
-{ 
-    return lhs.base() <= rhs.base(); 
-}
-template<typename BaseL, typename BaseR, typename Container>
-constexpr bool operator >= (const BasicIterator<BaseL, Container> &lhs, 
-                            const BasicIterator<BaseR, Container> &rhs) noexcept
-{ 
-    return lhs.base() >= rhs.base(); 
-}
-template<typename BaseL, typename BaseR, typename Container,
-        typename Diff = EnableIf_t<
-            std::is_same<
-                typename BasicIterator<BaseL, Container>::difference_type,
-                typename BasicIterator<BaseR, Container>::difference_type
-            >::value, 
-            typename BasicIterator<BaseL, Container>::difference_type>>
-constexpr Diff operator - (const BasicIterator<BaseL, Container> &lhs, 
-                           const BasicIterator<BaseR, Container> &rhs)
-noexcept(noexcept(Diff{lhs.base() - rhs.base()}))
-{ 
-    return lhs.base() - rhs.base(); 
-}
 }
 
 
