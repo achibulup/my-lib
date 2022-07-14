@@ -132,8 +132,10 @@ class SADeleter
         swap(this->m_deal, other.m_deal);
     }
 
-    void operator () (const void*) noexcept
+    template<typename Tp>
+    void operator () (Tp *ptr) noexcept
     {
+        if (ptr) destroy(ptr);
         if (this->m_deal) {
           this->m_deal(this->m_derived);
           this->m_derived = {};
